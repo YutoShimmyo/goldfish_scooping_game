@@ -12,17 +12,19 @@
             min-height: 100vh;
             background-color: #f0f0f0;
             margin: 0;
-            font-family: 'Arial', sans-serif; /* モダンなフォントに変更可能 */
+            font-family: 'Arial', sans-serif;
+            overflow: hidden; /* スクロールバー防止 */
         }
         canvas {
             border: 1px solid black;
-            background-color: #e0f7fa; /* 水色背景 */
-            /* 背景画像をCSSで設定することも可能 */
-            /* background-image: url('images/background.png'); */
-            background-size: cover;
-            display: block; /* canvas下の余白を防ぐ */
+            background-color: #e0f7fa; /* デフォルトの背景色 */
+            display: block;
+            cursor: none; /* マウスカーソルを非表示にし、ポイを表示 */
         }
-        /* 必要に応じて他のUI要素のスタイルを追加 */
+        /* ホバーエフェクト用のスタイル（オプション） */
+        .hoverable {
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
