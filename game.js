@@ -1,171 +1,249 @@
-// グローバル定数
+/**
+ * 奇妙な仲間たちをすくえ！メダルポイポイ ゲーム
+ *
+ * 作成日: 2023-MM-DD (あなたの現在の日付)
+ * 製作者: Your Name (または AI)
+ *
+ * このゲームは、マウスでポイを操作し、様々なキャラクターをすくってメダルを増やすゲームです。
+ */
+
+// --- グローバル定数 ---
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
-const POI_RADIUS = 40; // ポイの半径
-const POI_COLOR = 'rgba(255, 255, 255, 0.5)'; // ポイの色（半透明の白）
-const POI_RING_COLOR = 'red'; // ポイの枠の色
-const POI_DOWN_COLOR = 'rgba(220, 220, 255, 0.6)'; // 水に入れた時の色
+const POI_RADIUS = 40; // ポイの視覚的な半径
+const POI_SCOOP_RADIUS_MARGIN = 5; // すくい判定を少しだけ甘くするマージン
+const POI_COLOR = 'rgba(255, 255, 255, 0.5)';
+const POI_RING_COLOR = 'red';
+const POI_DOWN_COLOR = 'rgba(220, 220, 255, 0.6)';
+const MAX_CHARACTERS_DEFAULT = 20; // 同時出現数の基準値
+const ASSET_PATHS = { // アセットパスを一元管理
+    IMAGES: 'images/',
+    SOUNDS: 'sounds/'
+};
 
-// ゲーム状態
-const GameState = {
+// --- ゲーム状態 ---
+const GameState = Object.freeze({
     LOADING: 'LOADING',
     TITLE: 'TITLE',
     DIFFICULTY_SELECT: 'DIFFICULTY_SELECT',
     PLAYING: 'PLAYING',
     GAME_OVER: 'GAME_OVER',
     RANKING: 'RANKING'
-};
+});
 
-// 難易度設定
-const Difficulty = {
-    EASY: { name: 'かんたん', initialMedals: 15, speedMultiplier: 0.8, spawnRateMultiplier: 1.2, levelDistribution: [0.5, 0.3, 0.15, 0.04, 0.01] }, // レベル1～5の出現割合
-    NORMAL: { name: 'ふつう', initialMedals: 10, speedMultiplier: 1.0, spawnRateMultiplier: 1.0, levelDistribution: [0.4, 0.3, 0.2, 0.08, 0.02] },
-    HARD: { name: 'むずかしい', initialMedals: 5, speedMultiplier: 1.3, spawnRateMultiplier: 0.8, levelDistribution: [0.3, 0.25, 0.25, 0.15, 0.05] }
-};
+// --- 難易度設定 ---
+const Difficulty = Object.freeze({
+    EASY: { name: 'かんたん', initialMedals: 15, speedMultiplier: 0.8, spawnRateMultiplier: 1.2, levelDistribution: [0.5, 0.3, 0.15, 0.04, 0.01], maxCharsModifier: -5 },
+    NORMAL: { name: 'ふつう', initialMedals: 10, speedMultiplier: 1.0, spawnRateMultiplier: 1.0, levelDistribution: [0.4, 0.3, 0.2, 0.08, 0.02], maxCharsModifier: 0 },
+    HARD: { name: 'むずかしい', initialMedals: 5, speedMultiplier: 1.3, spawnRateMultiplier: 0.8, levelDistribution: [0.3, 0.25, 0.25, 0.15, 0.05], maxCharsModifier: 5 }
+});
+
+// --- キャラクタータイプ定義 ---
+// 各キャラクターの画像パスは ASSET_PATHS.IMAGES + 'ファイル名' となる
+// 各キャラクターの音声パスは ASSET_PATHS.SOUNDS + 'ファイル名' となる (必要であれば)
+const characterTypes = [
+    // レベル、メダル、速度、回避有無、当たり判定半径、出現比率、色(画像ない場合)、画像ファイル名
+    { id: 'wakin', name: '和金', level: 1, medals: 1, speed: 1.0, avoidsPoi: false, hitRadius: 15, appearanceRate: 30, color: '#e74c3c', imageName: 'wakin.png' },
+    { id: 'demekin', name: '出目金', level: 2, medals: 3, speed: 0.8, avoidsPoi: false, hitRadius: 18, appearanceRate: 20, color: '#34495e', imageName: 'demekin.png' },
+    { id: 'ryukin', name: '琉金', level: 3, medals: 5, speed: 1.2, avoidsPoi: true, hitRadius: 20, appearanceRate: 15, color: '#f39c12', imageName: 'ryukin.png' },
+    { id: 'ranchu', name: 'らんちゅう', level: 4, medals: 8, speed: 0.7, avoidsPoi: false, hitRadius: 22, appearanceRate: 10, color: '#e67e22', imageName: 'ranchu.png' },
+    { id: 'koi', name: '錦鯉', level: 5, medals: 12, speed: 1.5, avoidsPoi: true, hitRadius: 25, appearanceRate: 7, color: '#ecf0f1', imageName: 'koi.png' },
+    { id: 'zarigani', name: 'ザリガニ', level: 3, medals: 4, speed: 0.9, avoidsPoi: false, hitRadius: 20, appearanceRate: 10, color: '#c0392b', imageName: 'zarigani.png' },
+    { id: 'slime', name: 'スライム', level: 2, medals: 2, speed: 0.6, avoidsPoi: false, hitRadius: 18, appearanceRate: 15, color: '#3498db', imageName: 'slime.png' },
+    { id: 'baby', name: '赤ちゃん', level: 1, medals: 1, speed: 0.5, avoidsPoi: false, hitRadius: 16, appearanceRate: 10, color: '#ffc9a7', imageName: 'baby.png' },
+    { id: 'ojisan', name: 'おじさん', level: 6, medals: 15, speed: 1.3, avoidsPoi: true, hitRadius: 28, appearanceRate: 5, color: '#bdc3c7', imageName: 'ojisan.png', scoopSoundId: 'ojisan_voice' },
+    { id: 'brick', name: 'レンガ', level: 1, medals: 0, speed: 0.1, avoidsPoi: false, hitRadius: 20, appearanceRate: 5, color: '#a0522d', imageName: 'brick.png' },
+    { id: 'rare_dragon', name: 'レアドラン', level: 10, medals: 50, speed: 2.0, avoidsPoi: true, hitRadius: 35, appearanceRate: 1, color: '#f1c40f', imageName: 'rare_dragon.png' }
+    // --- ここにさらに多様なキャラクターを追加 ---
+];
 
 // --- ユーティリティ関数 ---
 function getRandomInt(min, max) {
-    min = Math.ceil(min);
-    max = Math.floor(max);
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
-
 function getRandomFloat(min, max) {
     return Math.random() * (max - min) + min;
 }
-
 function distance(x1, y1, x2, y2) {
     const dx = x1 - x2;
     const dy = y1 - y2;
     return Math.sqrt(dx * dx + dy * dy);
 }
+// 16進数カラーコードをRGB配列に変換 (エラー時は黒を返す)
+function hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)] : [0, 0, 0];
+}
 
-// --- アセット（画像・音声）管理 ---
+// --- アセットローダー ---
 class AssetLoader {
     constructor() {
-        this.images = {};
-        this.sounds = {};
+        this.images = new Map();
+        this.sounds = new Map();
         this.totalAssets = 0;
         this.loadedAssets = 0;
+        this.errorAssets = 0;
         this.onComplete = null;
     }
 
-    addImage(id, path) {
+    _addImage(id, path) {
         this.totalAssets++;
         const img = new Image();
-        img.onload = () => this._assetLoaded();
-        img.onerror = () => {
-            console.error(`Failed to load image: ${path}`);
-            this._assetLoaded(); // エラーでもカウントは進める
-        };
+        img.onload = () => this._assetLoaded(id, path, true);
+        img.onerror = () => this._assetLoaded(id, path, false);
         img.src = path;
-        this.images[id] = img;
+        this.images.set(id, { asset: img, loaded: false });
     }
 
-    addSound(id, path) {
+    _addSound(id, path) {
         this.totalAssets++;
         const audio = new Audio();
-        // 'canplaythrough' イベントでロード完了を判定
-        audio.oncanplaythrough = () => this._assetLoaded();
-        audio.onerror = () => {
-            console.error(`Failed to load sound: ${path}`);
-            this._assetLoaded(); // エラーでもカウントは進める
+        const onCanPlayThrough = () => {
+            this._assetLoaded(id, path, true);
+            audio.removeEventListener('canplaythrough', onCanPlayThrough);
+            audio.removeEventListener('error', onError);
         };
+        const onError = () => {
+            this._assetLoaded(id, path, false);
+            audio.removeEventListener('canplaythrough', onCanPlayThrough);
+            audio.removeEventListener('error', onError);
+        };
+        audio.addEventListener('canplaythrough', onCanPlayThrough);
+        audio.addEventListener('error', onError);
         audio.src = path;
-        this.sounds[id] = audio;
+        // audio.load(); // Safariなどで必要になる場合があるかもしれない
+        this.sounds.set(id, { asset: audio, loaded: false });
     }
 
-    _assetLoaded() {
+    _assetLoaded(id, path, success) {
         this.loadedAssets++;
-        if (this.loadedAssets === this.totalAssets && this.onComplete) {
-            this.onComplete();
+        const assetData = this.images.get(id) || this.sounds.get(id);
+        if (assetData) {
+            assetData.loaded = success;
         }
+
+        if (success) {
+            // console.log(`[AssetLoader] Loaded: ${path}`); // 開発時デバッグ用
+        } else {
+            this.errorAssets++;
+            console.warn(`[AssetLoader] Failed to load: ${path}`);
+        }
+
+        if (this.loadedAssets === this.totalAssets) {
+            console.log(`[AssetLoader] Loading complete. Total: ${this.totalAssets}, Errors: ${this.errorAssets}`);
+            if (this.onComplete) {
+                try {
+                    this.onComplete();
+                } catch (e) {
+                    console.error("[AssetLoader] Error in onComplete callback:", e);
+                }
+            }
+        }
+    }
+
+    // 画像や音声のパスを指定してロードを開始するヘルパー関数
+    loadImage(id, filename) {
+        this._addImage(id, ASSET_PATHS.IMAGES + filename);
+    }
+    loadSound(id, filename) {
+        this._addSound(id, ASSET_PATHS.SOUNDS + filename);
     }
 
     getImage(id) {
-        return this.images[id];
+        const data = this.images.get(id);
+        return (data && data.loaded) ? data.asset : null;
     }
 
     getSound(id) {
-        // サウンド再生時にクローンを作成して同時再生に対応
-        const sound = this.sounds[id];
-        return sound ? sound.cloneNode() : null;
+        const data = this.sounds.get(id);
+        // 音声はロード失敗しても再生試行時にエラーになるだけなので、asset自体は返す
+        // readyStateチェックは再生側で行う
+        const sound = data ? data.asset : null;
+        // 同時再生のためにクローンを返す (ロードできていない場合はnull)
+        return sound && sound.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA ? sound.cloneNode() : null;
     }
 
-    startLoading(onComplete) {
+    start(onComplete) {
         this.onComplete = onComplete;
-        if (this.totalAssets === 0) { // 読み込むアセットがない場合
-            onComplete();
+        if (this.totalAssets === 0) {
+            console.log("[AssetLoader] No assets to load.");
+            setTimeout(() => this.onComplete ? this.onComplete() : null, 0);
+        } else if (this.loadedAssets === this.totalAssets) {
+             console.log("[AssetLoader] Assets already loaded (possibly cached).");
+             setTimeout(() => this.onComplete ? this.onComplete() : null, 0);
         }
+        // ロード中の場合は _assetLoaded 内で onComplete が呼ばれる
     }
 
-    getLoadingProgress() {
-        if (this.totalAssets === 0) return 1;
-        return this.loadedAssets / this.totalAssets;
+    getProgress() {
+        return this.totalAssets === 0 ? 1 : this.loadedAssets / this.totalAssets;
     }
 }
 
-// --- サウンド管理 ---
+// --- サウンドマネージャー ---
 class SoundManager {
     constructor(assetLoader) {
         this.assetLoader = assetLoader;
-        this.bgm = null;
-        this.isMuted = false; // 消音機能（オプション）
+        this.currentBGM = null;
+        this.isMuted = false;
     }
 
     playBGM(id, loop = true) {
         if (this.isMuted) return;
-        if (this.bgm) {
-            this.bgm.pause();
-            this.bgm.currentTime = 0;
-        }
-        this.bgm = this.assetLoader.getSound(id);
-        if (this.bgm) {
-            this.bgm.loop = loop;
-            this.bgm.play().catch(e => console.warn("BGM play failed:", e)); // 自動再生ポリシー対策
+        this.stopBGM(); // 既存のBGMを停止
+        const bgm = this.assetLoader.getSound(id);
+        if (bgm) {
+            this.currentBGM = bgm;
+            this.currentBGM.loop = loop;
+            this.currentBGM.play().catch(e => console.warn(`[SoundManager] BGM play failed for ${id}: ${e.message}`));
+        } else {
+            console.warn(`[SoundManager] BGM asset not ready or not found: ${id}`);
         }
     }
 
     stopBGM() {
-        if (this.bgm) {
-            this.bgm.pause();
-            this.bgm.currentTime = 0;
+        if (this.currentBGM) {
+            this.currentBGM.pause();
+            this.currentBGM.currentTime = 0;
+            this.currentBGM = null;
         }
-        this.bgm = null;
     }
 
-    playSE(id) {
+    playSE(id, volume = 1.0) {
         if (this.isMuted) return;
         const se = this.assetLoader.getSound(id);
         if (se) {
-            se.play().catch(e => console.warn("SE play failed:", e));
+            se.volume = volume;
+            se.play().catch(e => console.warn(`[SoundManager] SE play failed for ${id}: ${e.message}`));
+        } else {
+            // console.warn(`[SoundManager] SE asset not ready or not found: ${id}`); // SEは頻繁なので警告しない方が良いかも
         }
     }
 
-    // 消音切り替えなどのメソッドを追加可能
     toggleMute() {
         this.isMuted = !this.isMuted;
         if (this.isMuted) {
-            this.stopBGM(); // ミュート時にBGM停止
+            this.stopBGM();
         } else {
-            // 必要なら直前のBGMを再開するロジック
+            // 必要であれば、ミュート解除時に直前のBGMを再開する処理
         }
+        console.log(`[SoundManager] Muted: ${this.isMuted}`);
     }
 }
 
-// --- ランキング管理 ---
+// --- ランキングマネージャー ---
 class Ranking {
-    constructor(storageKey = 'medalGameRanking') {
+    constructor(storageKey = 'medalGameRanking_v1') { // キーを変更して古いデータと競合しないように
         this.storageKey = storageKey;
         this.scores = this._loadScores();
     }
 
     _loadScores() {
         try {
-            const storedScores = localStorage.getItem(this.storageKey);
-            return storedScores ? JSON.parse(storedScores) : [];
+            const data = localStorage.getItem(this.storageKey);
+            return data ? JSON.parse(data) : [];
         } catch (e) {
-            console.error("Failed to load scores from localStorage:", e);
+            console.error("[Ranking] Failed to load scores:", e);
             return [];
         }
     }
@@ -174,22 +252,24 @@ class Ranking {
         try {
             localStorage.setItem(this.storageKey, JSON.stringify(this.scores));
         } catch (e) {
-            console.error("Failed to save scores to localStorage:", e);
+            console.error("[Ranking] Failed to save scores:", e);
         }
     }
 
     addScore(score) {
-        // 名前入力は今回省略し、スコアのみ記録
-        this.scores.push({ score: score, date: new Date().toISOString() });
-        // スコアで降順ソート
+        if (typeof score !== 'number' || score <= 0) return; // 無効なスコアは追加しない
+        this.scores.push({ score, date: Date.now() }); // Date.now()で数値として保存
         this.scores.sort((a, b) => b.score - a.score);
-        // 上位10件のみ保持（例）
-        this.scores = this.scores.slice(0, 10);
+        this.scores = this.scores.slice(0, 10); // 上位10件
         this._saveScores();
     }
 
     getHighScores(limit = 5) {
-        return this.scores.slice(0, limit);
+        return this.scores.slice(0, limit).map(entry => ({
+            score: entry.score,
+            // 日付表示が必要な場合:
+            // date: new Date(entry.date).toLocaleDateString()
+        }));
     }
 
     getHighScore() {
@@ -197,237 +277,336 @@ class Ranking {
     }
 }
 
-// --- UI管理 ---
+// --- UI (描画関連) ---
 class UI {
-    constructor(ctx, assetLoader) {
+    constructor(ctx, assetLoader, game) { // gameへの参照を追加して状態を取得
         this.ctx = ctx;
         this.assetLoader = assetLoader;
-        this.floatingTexts = []; // [+メダル] などの演出用
+        this.game = game; // gameオブジェクトへの参照
+        this.floatingTexts = [];
+        this.buttons = []; // 現在表示中のボタンリスト
     }
 
-    // フローティングテキストを追加
-    addFloatingText(text, x, y, color = 'gold', duration = 1000, size = 20) {
-        this.floatingTexts.push({ text, x, y, color, startTime: Date.now(), duration, size });
+    // フローティングテキスト（+メダル表示など）
+    addFloatingText(text, x, y, options = {}) {
+        const { color = 'gold', duration = 1000, size = 20, vy = -0.5 } = options;
+        const rgbColor = hexToRgb(color); // RGBA用にRGB配列を取得
+        this.floatingTexts.push({
+            text, x, y, rgbColor, startTime: Date.now(), duration, size, vy
+        });
     }
 
-    // UI要素の更新（アニメーションなど）
     update(deltaTime) {
         const now = Date.now();
         this.floatingTexts = this.floatingTexts.filter(ft => {
             const elapsed = now - ft.startTime;
             if (elapsed >= ft.duration) return false;
-            // 少し上に移動させる
-            ft.y -= 0.5 * (deltaTime / 16); // deltaTimeに応じて移動量を調整
-            // 徐々に透過させる
+            ft.y += ft.vy * (deltaTime / 16.67); // フレームレートに依存しない移動
             ft.alpha = 1.0 - (elapsed / ft.duration);
             return true;
         });
-    }
 
-    // ゲームプレイ中のUIを描画
-    drawGameUI(medals, highScore) {
-        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        this.ctx.fillRect(0, 0, CANVAS_WIDTH, 50); // 上部バー
-
-        this.ctx.fillStyle = 'white';
-        this.ctx.font = '24px Arial';
-        this.ctx.textAlign = 'left';
-        this.ctx.fillText(`メダル: ${medals}`, 20, 35);
-
-        this.ctx.textAlign = 'right';
-        this.ctx.fillText(`ハイスコア: ${highScore}`, CANVAS_WIDTH - 20, 35);
-
-        // フローティングテキストを描画
-        this.floatingTexts.forEach(ft => {
-            this.ctx.fillStyle = `rgba(${this._hexToRgb(ft.color)}, ${ft.alpha})`;
-            this.ctx.font = `${ft.size}px Arial Black`; // 目立つフォント
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText(ft.text, ft.x, ft.y);
+        // ボタンのホバー状態更新
+        this.buttons.forEach(button => {
+            button.hover = this._isMouseOverButton(button, this.game.mouseX, this.game.mouseY);
         });
     }
 
-    // タイトル画面描画
-    drawTitleScreen() {
-        this.ctx.fillStyle = '#3498db'; // 明るい青
-        this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    // ボタン描画ヘルパー
+    _drawButton(button) {
+        const ctx = this.ctx;
+        // スタイル設定
+        const bgColor = button.hover ? (button.hoverBgColor || '#e0e0e0') : (button.bgColor || '#f5f5f5');
+        const textColor = button.hover ? (button.hoverTextColor || '#000000') : (button.textColor || '#333333');
+        const borderColor = button.borderColor || '#cccccc';
+        const font = button.font || '20px Arial';
 
-        // 背景画像があれば描画
-        const bg = this.assetLoader.getImage('title_bg');
-        if (bg) {
-            this.ctx.drawImage(bg, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        // 背景
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(button.x, button.y, button.width, button.height);
+
+        // 枠線
+        if(borderColor) {
+            ctx.strokeStyle = borderColor;
+            ctx.lineWidth = 1;
+            ctx.strokeRect(button.x, button.y, button.width, button.height);
         }
 
-        this.ctx.fillStyle = 'white';
-        this.ctx.font = 'bold 48px Arial';
-        this.ctx.textAlign = 'center';
-        this.ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-        this.ctx.shadowBlur = 5;
-        this.ctx.shadowOffsetX = 3;
-        this.ctx.shadowOffsetY = 3;
-        this.ctx.fillText('奇妙な仲間たちをすくえ！', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 3);
-        this.ctx.font = 'bold 60px Impact'; // インパクトのあるフォント
-        this.ctx.fillStyle = '#f1c40f'; // 金色
-        this.ctx.fillText('メダルポイポイ', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+        // テキスト
+        ctx.fillStyle = textColor;
+        ctx.font = font;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(button.text, button.x + button.width / 2, button.y + button.height / 2 + 2); // 少し下にずらす調整
+    }
 
-        this.ctx.shadowColor = 'transparent'; // 影をリセット
-        this.ctx.fillStyle = 'white';
-        this.ctx.font = '24px Arial';
-        // 点滅するテキスト（簡易実装）
-        if (Math.floor(Date.now() / 500) % 2 === 0) {
-            this.ctx.fillText('Click or Tap to Start', CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.7);
+    // マウスがボタン上にあるか判定
+    _isMouseOverButton(button, mouseX, mouseY) {
+        return mouseX >= button.x && mouseX <= button.x + button.width &&
+               mouseY >= button.y && mouseY <= button.y + button.height;
+    }
+
+    // クリックされたボタンのアクションを実行
+    handleClick(mouseX, mouseY) {
+        const clickedButton = this.buttons.find(button => this._isMouseOverButton(button, mouseX, mouseY));
+        if (clickedButton && clickedButton.action) {
+            this.game.soundManager.playSE('button_click_sfx');
+            clickedButton.action();
+            return true; // クリックが処理された
         }
+        return false; // クリックは処理されなかった
     }
 
-    // 難易度選択画面描画
-    drawDifficultySelectScreen(buttons) {
-        this.ctx.fillStyle = '#2ecc71'; // 緑色
-        this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    // --- 各画面の描画 ---
 
-        this.ctx.fillStyle = 'white';
-        this.ctx.font = 'bold 36px Arial';
-        this.ctx.textAlign = 'center';
-        this.ctx.fillText('難易度を選んでね', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 4);
-
-        // ボタンを描画
-        buttons.forEach(button => {
-            this.ctx.fillStyle = button.hover ? '#bdc3c7' : '#ecf0f1'; // ホバー色変更
-            this.ctx.fillRect(button.x, button.y, button.width, button.height);
-            this.ctx.fillStyle = '#2c3e50';
-            this.ctx.font = '24px Arial';
-            this.ctx.textAlign = 'center';
-            this.ctx.textBaseline = 'middle';
-            this.ctx.fillText(button.text, button.x + button.width / 2, button.y + button.height / 2);
-        });
-    }
-
-    // ゲームオーバー画面描画
-    drawGameOverScreen(finalMedals, highScore, isNewHighScore, buttons) {
-        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; // 半透明の黒でオーバーレイ
-        this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-        this.ctx.fillStyle = 'white';
-        this.ctx.font = 'bold 72px Arial';
-        this.ctx.textAlign = 'center';
-        this.ctx.fillText('Game Over', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 3);
-
-        this.ctx.font = '36px Arial';
-        this.ctx.fillText(`最終メダル: ${finalMedals}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
-
-        if (isNewHighScore) {
-            this.ctx.fillStyle = '#f1c40f'; // 金色
-            this.ctx.font = 'bold 30px Arial';
-            this.ctx.fillText('ハイスコア更新！', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 50);
-            this.ctx.fillStyle = 'white'; // 色を戻す
-        } else {
-            this.ctx.font = '24px Arial';
-            this.ctx.fillText(`ハイスコア: ${highScore}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 50);
-        }
-
-        // ボタンを描画
-        buttons.forEach(button => {
-             this.ctx.fillStyle = button.hover ? '#95a5a6' : '#7f8c8d'; // ホバー色変更
-             this.ctx.fillRect(button.x, button.y, button.width, button.height);
-             this.ctx.fillStyle = 'white';
-             this.ctx.font = '20px Arial';
-             this.ctx.textAlign = 'center';
-             this.ctx.textBaseline = 'middle';
-             this.ctx.fillText(button.text, button.x + button.width / 2, button.y + button.height / 2);
-        });
-    }
-
-     // ランキング画面描画
-    drawRankingScreen(highScores, buttons) {
-        this.ctx.fillStyle = '#8e44ad'; // 紫色
-        this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-        this.ctx.fillStyle = 'white';
-        this.ctx.font = 'bold 48px Arial';
-        this.ctx.textAlign = 'center';
-        this.ctx.fillText('ランキング', CANVAS_WIDTH / 2, 100);
-
-        this.ctx.font = '24px Arial';
-        this.ctx.textAlign = 'center';
-        if (highScores.length === 0) {
-            this.ctx.fillText('まだ記録がありません', CANVAS_WIDTH / 2, 200);
-        } else {
-            highScores.forEach((entry, index) => {
-                const yPos = 180 + index * 40;
-                this.ctx.textAlign = 'left';
-                this.ctx.fillText(`${index + 1}.`, CANVAS_WIDTH / 2 - 150, yPos);
-                this.ctx.textAlign = 'right';
-                this.ctx.fillText(`${entry.score} メダル`, CANVAS_WIDTH / 2 + 150, yPos);
-                // 日付表示 (オプション)
-                // const date = new Date(entry.date).toLocaleDateString();
-                // this.ctx.textAlign = 'center';
-                // this.ctx.fillText(date, CANVAS_WIDTH / 2 + 200, yPos);
-            });
-        }
-
-        // ボタンを描画
-        buttons.forEach(button => {
-            this.ctx.fillStyle = button.hover ? '#ecf0f1' : '#bdc3c7'; // ホバー色変更
-            this.ctx.fillRect(button.x, button.y, button.width, button.height);
-            this.ctx.fillStyle = '#2c3e50';
-            this.ctx.font = '20px Arial';
-            this.ctx.textAlign = 'center';
-            this.ctx.textBaseline = 'middle';
-            this.ctx.fillText(button.text, button.x + button.width / 2, button.y + button.height / 2);
-        });
-    }
-
-    // ローディング画面描画
     drawLoadingScreen(progress) {
-        this.ctx.fillStyle = 'black';
-        this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        const ctx = this.ctx;
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-        this.ctx.fillStyle = 'white';
-        this.ctx.font = '24px Arial';
-        this.ctx.textAlign = 'center';
-        this.ctx.fillText('Loading...', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 30);
+        ctx.fillStyle = 'white';
+        ctx.font = '24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Loading Assets...', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 40);
 
-        // プログレスバー
         const barWidth = 300;
         const barHeight = 20;
         const barX = (CANVAS_WIDTH - barWidth) / 2;
         const barY = CANVAS_HEIGHT / 2;
-        this.ctx.strokeStyle = 'white';
-        this.ctx.strokeRect(barX, barY, barWidth, barHeight);
-        this.ctx.fillStyle = '#3498db';
-        this.ctx.fillRect(barX, barY, barWidth * progress, barHeight);
+        ctx.strokeStyle = 'white';
+        ctx.strokeRect(barX, barY, barWidth, barHeight);
+        ctx.fillStyle = '#3498db';
+        ctx.fillRect(barX, barY, barWidth * progress, barHeight);
+
+        ctx.font = '16px Arial';
+        ctx.fillText(`${Math.round(progress * 100)}%`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 40);
     }
 
-    // 16進数カラーコードをRGBオブジェクトに変換
-    _hexToRgb(hex) {
-        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-        return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`
-                      : '0, 0, 0'; // デフォルトは黒
+    drawTitleScreen() {
+        const ctx = this.ctx;
+        const bg = this.assetLoader.getImage('title_bg'); // タイトル背景画像取得
+        if (bg) {
+            ctx.drawImage(bg, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        } else {
+            ctx.fillStyle = '#3498db'; // デフォルト背景色
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        }
+
+        // タイトルテキストスタイル
+        ctx.textAlign = 'center';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        ctx.shadowBlur = 5;
+        ctx.shadowOffsetX = 3;
+        ctx.shadowOffsetY = 3;
+
+        // メインタイトル
+        ctx.font = 'bold 48px Arial';
+        ctx.fillStyle = 'white';
+        ctx.fillText('奇妙な仲間たちをすくえ！', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 3);
+
+        // サブタイトル
+        ctx.font = 'bold 70px Impact, sans-serif'; // Impactがなければsans-serif
+        ctx.fillStyle = '#f1c40f'; // 金色
+        ctx.fillText('メダルポイポイ', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+
+        // 開始メッセージ (点滅)
+        ctx.shadowColor = 'transparent'; // 影リセット
+        ctx.font = '24px Arial';
+        ctx.fillStyle = 'white';
+        if (Math.floor(Date.now() / 500) % 2 === 0) {
+            ctx.fillText('Click or Tap to Start', CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.7);
+        }
+        // ボタンリストは空
+        this.buttons = [];
+    }
+
+    drawDifficultySelectScreen() {
+        const ctx = this.ctx;
+        ctx.fillStyle = '#2ecc71'; // 背景色
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 36px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('難易度を選んでね', CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.2);
+
+        // ボタン定義
+        const btnWidth = 180;
+        const btnHeight = 60;
+        const btnY = CANVAS_HEIGHT / 2 - btnHeight / 2;
+        const spacing = 40;
+        const totalWidth = btnWidth * 3 + spacing * 2;
+        const startX = (CANVAS_WIDTH - totalWidth) / 2;
+
+        this.buttons = [
+            {
+                text: Difficulty.EASY.name, x: startX, y: btnY, width: btnWidth, height: btnHeight,
+                action: () => this.game.startGame(Difficulty.EASY),
+                bgColor: '#90ee90', hoverBgColor: '#7cfc00' // Easy用カラー
+            },
+            {
+                text: Difficulty.NORMAL.name, x: startX + btnWidth + spacing, y: btnY, width: btnWidth, height: btnHeight,
+                action: () => this.game.startGame(Difficulty.NORMAL),
+                 bgColor: '#add8e6', hoverBgColor: '#87cefa' // Normal用カラー
+            },
+            {
+                text: Difficulty.HARD.name, x: startX + (btnWidth + spacing) * 2, y: btnY, width: btnWidth, height: btnHeight,
+                action: () => this.game.startGame(Difficulty.HARD),
+                 bgColor: '#f08080', hoverBgColor: '#ff6347' // Hard用カラー
+            }
+        ];
+
+        // ボタン描画
+        this.buttons.forEach(button => this._drawButton(button));
+    }
+
+    drawGameScreen(medals, highScore) {
+        const ctx = this.ctx;
+        // 背景描画 (もしあれば)
+        const bg = this.assetLoader.getImage('game_bg');
+        if (bg) {
+            ctx.drawImage(bg, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        } else {
+            ctx.fillStyle = '#e0f7fa'; // デフォルトの水中色
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            // ここに気泡などの背景エフェクトを追加可能
+        }
+
+        // キャラクターとポイは Game クラスで描画される
+
+        // UI情報バー
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillRect(0, 0, CANVAS_WIDTH, 50);
+
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`メダル: ${medals}`, 20, 27);
+
+        ctx.textAlign = 'right';
+        ctx.fillText(`ハイスコア: ${highScore}`, CANVAS_WIDTH - 20, 27);
+
+        // フローティングテキスト描画
+        this.floatingTexts.forEach(ft => {
+            ctx.fillStyle = `rgba(${ft.rgbColor.join(',')}, ${ft.alpha})`;
+            ctx.font = `bold ${ft.size}px Arial Black`; // 目立つフォント
+            ctx.textAlign = 'center';
+            ctx.fillText(ft.text, ft.x, ft.y);
+        });
+    }
+
+    drawGameOverScreen(finalMedals, highScore, isNewHighScore) {
+        const ctx = this.ctx;
+        // 背景は薄く表示されている想定 (Gameクラスで制御)
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; // 暗めのオーバーレイ
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#ff4444'; // 赤色
+        ctx.font = 'bold 80px Impact, sans-serif';
+        ctx.fillText('Game Over', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 3);
+
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 36px Arial';
+        ctx.fillText(`最終メダル: ${finalMedals}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+
+        if (isNewHighScore) {
+            ctx.fillStyle = '#f1c40f'; // 金色
+            ctx.font = 'bold 30px Arial';
+            ctx.fillText('ハイスコア更新！', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 50);
+        } else {
+            ctx.fillStyle = 'white';
+            ctx.font = '24px Arial';
+            ctx.fillText(`ハイスコア: ${highScore}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 50);
+        }
+
+        // ボタン定義
+        const btnWidth = 180;
+        const btnHeight = 50;
+        const btnY = CANVAS_HEIGHT * 0.7;
+        const spacing = 40;
+
+        this.buttons = [
+            {
+                text: 'ランキングを見る', x: CANVAS_WIDTH / 2 - btnWidth - spacing / 2, y: btnY, width: btnWidth, height: btnHeight,
+                action: () => this.game.goToRanking(),
+                bgColor: '#3498db', hoverBgColor: '#5dade2' // 青系
+            },
+            {
+                text: 'タイトルへ戻る', x: CANVAS_WIDTH / 2 + spacing / 2, y: btnY, width: btnWidth, height: btnHeight,
+                action: () => this.game.goToTitle(),
+                bgColor: '#95a5a6', hoverBgColor: '#bdc3c7' // グレー系
+            }
+        ];
+        // ボタン描画
+        this.buttons.forEach(button => this._drawButton(button));
+    }
+
+     drawRankingScreen(highScores) {
+        const ctx = this.ctx;
+        ctx.fillStyle = '#8e44ad'; // 紫背景
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 48px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('ランキング', CANVAS_WIDTH / 2, 100);
+
+        ctx.font = '24px Arial';
+        if (highScores.length === 0) {
+            ctx.fillText('まだ記録がありません', CANVAS_WIDTH / 2, 200);
+        } else {
+            highScores.forEach((entry, index) => {
+                const yPos = 180 + index * 45;
+                ctx.textAlign = 'left';
+                ctx.fillText(`${index + 1}.`, CANVAS_WIDTH / 2 - 180, yPos);
+                ctx.textAlign = 'right';
+                ctx.fillText(`${entry.score} メダル`, CANVAS_WIDTH / 2 + 180, yPos);
+            });
+        }
+
+        // ボタン定義
+        const btnWidth = 200;
+        const btnHeight = 50;
+        const btnY = CANVAS_HEIGHT * 0.85;
+        this.buttons = [
+             {
+                text: 'タイトルへ戻る', x: CANVAS_WIDTH / 2 - btnWidth / 2, y: btnY, width: btnWidth, height: btnHeight,
+                action: () => this.game.goToTitle(),
+                bgColor: '#bdc3c7', hoverBgColor: '#ecf0f1'
+            }
+        ];
+        // ボタン描画
+        this.buttons.forEach(button => this._drawButton(button));
     }
 }
 
 // --- ポイクラス ---
 class Poi {
-    constructor(x, y, radius, assetLoader) {
-        this.x = x;
-        this.y = y;
-        this.radius = radius;
-        this.isDown = false; // 水に入っているか
-        this.assetLoader = assetLoader;
-        // ポイの画像を使う場合
-        // this.image = this.assetLoader.getImage('poi_image');
+    constructor(assetLoader) {
+        this.x = -100; // 初期位置は画面外
+        this.y = -100;
+        this.radius = POI_RADIUS;
+        this.isDown = false; // マウスが押されているか
+        this.image = assetLoader.getImage('poi'); // ポイ画像 (オプション)
+        this.isVisible = false; // マウスがCanvas内にあるか
     }
 
-    update(mouseX, mouseY, isMouseDown) {
+    update(mouseX, mouseY, isMouseDown, isMouseInCanvas) {
         this.x = mouseX;
         this.y = mouseY;
         this.isDown = isMouseDown;
+        this.isVisible = isMouseInCanvas;
     }
 
     draw(ctx) {
-        // 画像があれば画像を描画
-        // if (this.image) {
-        //     ctx.drawImage(this.image, this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
-        // } else {
-            // 画像がない場合は円で描画
+        if (!this.isVisible) return; // Canvas外なら描画しない
+
+        if (this.image) {
+            ctx.drawImage(this.image, this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
+        } else {
+            // 代替描画
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
             ctx.fillStyle = this.isDown ? POI_DOWN_COLOR : POI_COLOR;
@@ -435,23 +614,28 @@ class Poi {
             ctx.strokeStyle = POI_RING_COLOR;
             ctx.lineWidth = 3;
             ctx.stroke();
-            ctx.lineWidth = 1; // 他の描画のためにリセット
-        // }
+        }
 
-        // 水に入っているエフェクト（波紋など）
+        // 水に入っている時の波紋エフェクト
         if (this.isDown) {
-            ctx.strokeStyle = 'rgba(100, 100, 255, 0.3)';
+            ctx.strokeStyle = 'rgba(100, 100, 255, 0.4)';
             ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius + 5 + Math.sin(Date.now() / 100) * 2, 0, Math.PI * 2);
+            const rippleRadius = this.radius + 6 + Math.sin(Date.now() / 120) * 3;
+            ctx.arc(this.x, this.y, rippleRadius, 0, Math.PI * 2);
             ctx.stroke();
-            ctx.lineWidth = 1;
+            ctx.lineWidth = 1; // リセット
         }
     }
 
-    // 指定した座標がポイの中にあるか判定（すくい上げ用）
-    contains(x, y) {
-        return distance(this.x, this.y, x, y) <= this.radius;
+    // すくい上げ判定用
+    getScoopBounds() {
+        const scoopRadius = this.radius + POI_SCOOP_RADIUS_MARGIN;
+        return {
+            x: this.x,
+            y: this.y,
+            radius: scoopRadius
+        };
     }
 }
 
@@ -461,590 +645,608 @@ class Character {
         this.type = type;
         this.assetLoader = assetLoader;
         this.image = this.assetLoader.getImage(this.type.id);
-        this.x = getRandomInt(0, CANVAS_WIDTH);
-        this.y = getRandomInt(0, CANVAS_HEIGHT);
-        // 初期位置を画面外周にすることも可能
-        // const side = getRandomInt(0, 3);
-        // if (side === 0) { this.x = -this.getRadius(); this.y = getRandomInt(0, CANVAS_HEIGHT); } // Left
-        // else if (side === 1) { this.x = CANVAS_WIDTH + this.getRadius(); this.y = getRandomInt(0, CANVAS_HEIGHT); } // Right
-        // else if (side === 2) { this.x = getRandomInt(0, CANVAS_WIDTH); this.y = -this.getRadius(); } // Top
-        // else { this.x = getRandomInt(0, CANVAS_WIDTH); this.y = CANVAS_HEIGHT + this.getRadius(); } // Bottom
+
+        // 初期位置 (画面端から出現させる)
+        this._setInitialPosition();
 
         this.baseSpeed = this.type.speed * getRandomFloat(0.8, 1.2); // 個体差
         this.speedMultiplier = difficultyMultiplier;
-        this.angle = getRandomFloat(0, Math.PI * 2);
+        this.angle = getRandomFloat(0, Math.PI * 2); // 初期角度
         this.targetAngle = this.angle;
-        this.turnSpeed = 0.05; // 方向転換の速さ
+        this.turnSpeed = 0.05 * getRandomFloat(0.8, 1.2); // 旋回速度にも個体差
+
         this.wanderTimer = 0;
-        this.wanderInterval = getRandomFloat(1000, 3000); // 次の方向転換までの時間
+        this.wanderInterval = getRandomFloat(1000, 3500); // 次の方向転換までの時間
 
         this.avoidsPoi = this.type.avoidsPoi;
-        this.avoidDistance = 100 + this.getRadius(); // ポイを避ける距離
+        this.avoidDistance = 80 + this.getRadius(); // ポイを避ける距離
         this.isFleeing = false;
+
+        this.scoopSoundId = this.type.scoopSoundId; // すくわれた時の固有音ID
     }
 
-    getRadius() {
-        // 画像があれば画像のサイズから、なければhitRadiusから算出
-        return this.type.hitRadius || 20;
+    _setInitialPosition() {
+        const margin = this.getRadius() + 20; // 画面外のマージン
+        const side = getRandomInt(0, 3);
+        switch (side) {
+            case 0: // 上
+                this.x = getRandomFloat(0, CANVAS_WIDTH);
+                this.y = -margin;
+                break;
+            case 1: // 右
+                this.x = CANVAS_WIDTH + margin;
+                this.y = getRandomFloat(0, CANVAS_HEIGHT);
+                break;
+            case 2: // 下
+                this.x = getRandomFloat(0, CANVAS_WIDTH);
+                this.y = CANVAS_HEIGHT + margin;
+                break;
+            case 3: // 左
+                this.x = -margin;
+                this.y = getRandomFloat(0, CANVAS_HEIGHT);
+                break;
+        }
     }
 
-    getScoopRadius() {
-        // すくわれ判定半径 (レベルに応じて大きく)
-        return this.getRadius() * (1 + this.type.level * 0.1);
-    }
+    getRadius() { return this.type.hitRadius || 15; }
+    getScoopRadius() { return this.getRadius() * (1 + this.type.level * 0.08); } // すくわれやすさ (レベル依存)
 
     update(deltaTime, poiX, poiY) {
-        const dtSeconds = deltaTime / 1000;
-        const currentSpeed = this.baseSpeed * this.speedMultiplier * 60 * dtSeconds; // 60FPS基準の速度に調整
+        const dtRatio = deltaTime / 16.67; // 60FPS基準の移動量補正
+        const currentSpeed = this.baseSpeed * this.speedMultiplier * dtRatio;
 
         // --- 回避行動 ---
         this.isFleeing = false;
-        if (this.avoidsPoi) {
-            const distToPoi = distance(this.x, this.y, poiX, poiY);
-            if (distToPoi < this.avoidDistance) {
-                this.isFleeing = true;
-                // ポイから離れる角度を設定
-                this.targetAngle = Math.atan2(this.y - poiY, this.x - poiX);
-                // 少し速く逃げる
-                 const fleeSpeed = currentSpeed * 1.5;
-                 this.x += Math.cos(this.targetAngle) * fleeSpeed;
-                 this.y += Math.sin(this.targetAngle) * fleeSpeed;
-            }
+        if (this.avoidsPoi && distance(this.x, this.y, poiX, poiY) < this.avoidDistance) {
+            this.isFleeing = true;
+            this.targetAngle = Math.atan2(this.y - poiY, this.x - poiX); // ポイから離れる角度
+            const fleeSpeed = currentSpeed * 1.6; // 少し速く逃げる
+            // 旋回はせず、直接目標角度へ
+            this.x += Math.cos(this.targetAngle) * fleeSpeed;
+            this.y += Math.sin(this.targetAngle) * fleeSpeed;
+            // 逃げている時はwanderしない
+            this.wanderTimer = this.wanderInterval / 2; // 少し早めに次のWanderへ
         }
 
         // --- 通常移動 (ランダムウォーク) ---
         if (!this.isFleeing) {
             this.wanderTimer -= deltaTime;
             if (this.wanderTimer <= 0) {
-                // 新しい目標角度をランダムに設定
                 this.targetAngle = getRandomFloat(0, Math.PI * 2);
-                this.wanderTimer = this.wanderInterval;
-                // 稀に一時停止する
-                // if (Math.random() < 0.1) this.wanderTimer *= 2; // 例
+                this.wanderTimer = this.wanderInterval * getRandomFloat(0.8, 1.2);
             }
 
-            // 目標角度に滑らかに近づける
+            // 目標角度へ滑らかに旋回
             let angleDiff = this.targetAngle - this.angle;
             while (angleDiff <= -Math.PI) angleDiff += Math.PI * 2;
             while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-            this.angle += angleDiff * this.turnSpeed;
+            this.angle += angleDiff * this.turnSpeed * dtRatio; // フレームレート補正
 
+            // 前進
             this.x += Math.cos(this.angle) * currentSpeed;
             this.y += Math.sin(this.angle) * currentSpeed;
         }
 
-
-        // --- 画面端での反射 ---
+        // --- 画面端での反射 (少し柔らかく) ---
         const radius = this.getRadius();
+        const bounceFactor = -0.8; // 跳ね返り係数 (1未満で減速)
         if (this.x < radius) {
             this.x = radius;
-            this.angle = Math.PI - this.angle; // 反射
-            this.targetAngle = this.angle; // 目標も更新
+            this.angle = Math.PI - this.angle + getRandomFloat(-0.1, 0.1); // 少しランダム性
+            this.targetAngle = this.angle;
         } else if (this.x > CANVAS_WIDTH - radius) {
             this.x = CANVAS_WIDTH - radius;
-            this.angle = Math.PI - this.angle;
+            this.angle = Math.PI - this.angle + getRandomFloat(-0.1, 0.1);
             this.targetAngle = this.angle;
         }
         if (this.y < radius) {
             this.y = radius;
-            this.angle = -this.angle; // 反射
+            this.angle = -this.angle + getRandomFloat(-0.1, 0.1);
             this.targetAngle = this.angle;
         } else if (this.y > CANVAS_HEIGHT - radius) {
             this.y = CANVAS_HEIGHT - radius;
-            this.angle = -this.angle;
+            this.angle = -this.angle + getRandomFloat(-0.1, 0.1);
             this.targetAngle = this.angle;
         }
 
-        // 角度を正規化 (-PI から PI の範囲に)
-        while (this.angle <= -Math.PI) this.angle += Math.PI * 2;
-        while (this.angle > Math.PI) this.angle -= Math.PI * 2;
+        // 角度正規化
+        this.angle = (this.angle + Math.PI * 2) % (Math.PI * 2);
     }
 
     draw(ctx) {
         ctx.save();
         ctx.translate(this.x, this.y);
-        ctx.rotate(this.angle + Math.PI / 2); // 画像が上向きの場合、進行方向に合わせる
+        // 逃げている時は少し傾けるなど、状態に応じた見た目の変化も可能
+        ctx.rotate(this.angle + Math.PI / 2); // 画像は通常上が正面
 
-        if (this.image && this.image.complete && this.image.naturalWidth > 0) {
-            const radius = this.getRadius();
-            ctx.drawImage(this.image, -radius, -radius, radius * 2, radius * 2);
+        if (this.image) {
+            try {
+                const radius = this.getRadius();
+                ctx.drawImage(this.image, -radius, -radius, radius * 2, radius * 2);
+            } catch (e) {
+                 console.error(`[Character] Error drawing image for ${this.type.id}:`, e);
+                 this._drawFallback(ctx);
+            }
         } else {
-            // 画像がない場合の代替描画 (色付きの円)
-            ctx.beginPath();
-            ctx.arc(0, 0, this.getRadius(), 0, Math.PI * 2);
-            ctx.fillStyle = this.type.color || 'gray'; // タイプに定義された色、なければグレー
-            ctx.fill();
-            // 目印（進行方向を示す）
-            ctx.fillStyle = 'white';
-            ctx.beginPath();
-            ctx.moveTo(0, -this.getRadius() * 0.6);
-            ctx.lineTo(-this.getRadius() * 0.3, -this.getRadius() * 0.3);
-            ctx.lineTo(this.getRadius() * 0.3, -this.getRadius() * 0.3);
-            ctx.closePath();
-            ctx.fill();
+            this._drawFallback(ctx); // 画像がない or ロード失敗
         }
         ctx.restore();
 
-        // デバッグ用: 当たり判定円表示
-        // ctx.strokeStyle = 'red';
+        // デバッグ用: 当たり判定円
+        // ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
         // ctx.beginPath();
         // ctx.arc(this.x, this.y, this.getRadius(), 0, Math.PI*2);
         // ctx.stroke();
-        // ctx.strokeStyle = 'blue';
+        // ctx.strokeStyle = 'rgba(0, 0, 255, 0.5)';
         // ctx.beginPath();
         // ctx.arc(this.x, this.y, this.getScoopRadius(), 0, Math.PI*2);
         // ctx.stroke();
     }
-}
 
-// --- キャラクターデータ定義 ---
-// ★画像パスは実際のファイルに合わせてください
-const characterTypes = [
-    { id: 'wakin', name: '和金', level: 1, medals: 1, speed: 1.0, avoidsPoi: false, hitRadius: 15, appearanceRate: 30, imagePath: 'images/wakin.png', color: '#e74c3c' },
-    { id: 'demekin', name: '出目金', level: 2, medals: 3, speed: 0.8, avoidsPoi: false, hitRadius: 18, appearanceRate: 20, imagePath: 'images/demekin.png', color: '#34495e' },
-    { id: 'ryukin', name: '琉金', level: 3, medals: 5, speed: 1.2, avoidsPoi: true, hitRadius: 20, appearanceRate: 15, imagePath: 'images/ryukin.png', color: '#f39c12' },
-    { id: 'ranchu', name: 'らんちゅう', level: 4, medals: 8, speed: 0.7, avoidsPoi: false, hitRadius: 22, appearanceRate: 10, imagePath: 'images/ranchu.png', color: '#e67e22' },
-    { id: 'koi', name: '錦鯉', level: 5, medals: 12, speed: 1.5, avoidsPoi: true, hitRadius: 25, appearanceRate: 7, imagePath: 'images/koi.png', color: '#ecf0f1' },
-    { id: 'zarigani', name: 'ザリガニ', level: 3, medals: 4, speed: 0.9, avoidsPoi: false, hitRadius: 20, appearanceRate: 10, imagePath: 'images/zarigani.png', color: '#c0392b' },
-    { id: 'slime', name: 'スライム', level: 2, medals: 2, speed: 0.6, avoidsPoi: false, hitRadius: 18, appearanceRate: 15, imagePath: 'images/slime.png', color: '#3498db' },
-    { id: 'baby', name: '赤ちゃん', level: 1, medals: 1, speed: 0.5, avoidsPoi: false, hitRadius: 16, appearanceRate: 10, imagePath: 'images/baby.png', color: '#f C9a7' },
-    { id: 'ojisan', name: 'おじさん', level: 6, medals: 15, speed: 1.3, avoidsPoi: true, hitRadius: 28, appearanceRate: 5, imagePath: 'images/ojisan.png', color: '#bdc3c7' },
-    { id: 'brick', name: 'レンガ', level: 1, medals: 0, speed: 0.1, avoidsPoi: false, hitRadius: 20, appearanceRate: 5, imagePath: 'images/brick.png', color: '#a0522d' }, // すくっても得点なし
-    { id: 'rare_dragon', name: 'レアドラン', level: 10, medals: 50, speed: 2.0, avoidsPoi: true, hitRadius: 35, appearanceRate: 1, imagePath: 'images/rare_dragon.png', color: '#f1c40f' }
-    // --- もっとたくさん追加！ ---
-];
+    // 画像がない場合の代替描画
+    _drawFallback(ctx) {
+         const radius = this.getRadius();
+         ctx.beginPath();
+         ctx.arc(0, 0, radius, 0, Math.PI * 2);
+         ctx.fillStyle = this.type.color || 'gray';
+         ctx.fill();
+         // 目印 (進行方向)
+         ctx.fillStyle = 'white';
+         ctx.beginPath();
+         ctx.moveTo(0, -radius * 0.6);
+         ctx.lineTo(-radius * 0.3, -radius * 0.3);
+         ctx.lineTo(radius * 0.3, -radius * 0.3);
+         ctx.closePath();
+         ctx.fill();
+    }
+
+    // 画面外に出たか判定
+    isOutOfScreen() {
+        const margin = this.getRadius() + 50; // 画面外判定のマージン
+        return this.x < -margin || this.x > CANVAS_WIDTH + margin ||
+               this.y < -margin || this.y > CANVAS_HEIGHT + margin;
+    }
+}
 
 // --- ゲーム本体クラス ---
 class Game {
     constructor(canvas, ctx) {
         this.canvas = canvas;
         this.ctx = ctx;
+
         this.assetLoader = new AssetLoader();
         this.soundManager = new SoundManager(this.assetLoader);
         this.ranking = new Ranking();
-        this.ui = new UI(this.ctx, this.assetLoader);
-        this.poi = new Poi(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, POI_RADIUS, this.assetLoader);
+        this.ui = new UI(this.ctx, this.assetLoader, this); // UIにGameへの参照を渡す
+        this.poi = new Poi(this.assetLoader);
 
         this.currentState = GameState.LOADING;
         this.currentDifficulty = Difficulty.NORMAL;
         this.characters = [];
         this.medals = 0;
         this.highScore = this.ranking.getHighScore();
+
+        // 入力状態
         this.isMouseDown = false;
         this.mouseX = 0;
         this.mouseY = 0;
+        this.isMouseInCanvas = false;
 
+        // 時間管理
         this.lastTime = 0;
         this.spawnTimer = 0;
-        this.maxCharacters = 20; // 同時出現数の上限
+        this.maxCharacters = MAX_CHARACTERS_DEFAULT;
 
-        this.difficultyButtons = [];
-        this.gameOverButtons = [];
-        this.rankingButtons = [];
-
-        this._setupInputHandlers();
+        this._setupEventHandlers();
+        console.log("[Game] Game instance created. Waiting for initialization.");
     }
 
-    // --- 初期化・ロード ---
+    // --- 初期化 ---
     init() {
+        console.log("[Game] Initializing...");
         this.currentState = GameState.LOADING;
-        this._loadAssets(() => {
+        this._loadRequiredAssets(() => {
+            console.log("[Game] Assets loaded. Proceeding to Title.");
             this.currentState = GameState.TITLE;
-            this.soundManager.playBGM('title_bgm'); // タイトルBGM再生
-            this.gameLoop(); // ロード完了後ゲームループ開始
+            this.soundManager.playBGM('title_bgm');
         });
-        // ローディング中も描画ループは動かす
+        // ローディング表示のために先にループ開始
         this.gameLoop();
     }
 
-    _loadAssets(onComplete) {
-        console.log("Loading assets...");
-        // 画像ファイルのロード
-        this.assetLoader.addImage('title_bg', 'images/title_background.png'); // タイトル背景 (オプション)
-        this.assetLoader.addImage('game_bg', 'images/game_background.png'); // ゲーム背景 (オプション)
-        // this.assetLoader.addImage('poi_image', 'images/poi.png'); // ポイ画像 (オプション)
+    _loadRequiredAssets(onComplete) {
+        console.log("[Game] Loading required assets...");
+        // --- 画像ロード ---
+        this.assetLoader.loadImage('title_bg', 'title_background.png'); // オプション
+        this.assetLoader.loadImage('game_bg', 'game_background.png'); // オプション
+        // this.assetLoader.loadImage('poi', 'poi.png'); // ポイ画像 (オプション)
         characterTypes.forEach(type => {
-            if (type.imagePath) {
-                this.assetLoader.addImage(type.id, type.imagePath);
+            if (type.imageName) {
+                this.assetLoader.loadImage(type.id, type.imageName);
             }
         });
 
-        // 音声ファイルのロード (★パスは適宜変更)
-        this.assetLoader.addSound('title_bgm', 'sounds/title_bgm.mp3');
-        this.assetLoader.addSound('game_bgm', 'sounds/game_bgm.mp3');
-        this.assetLoader.addSound('game_over_bgm', 'sounds/game_over.mp3');
-        this.assetLoader.addSound('ranking_bgm', 'sounds/ranking.mp3');
-        this.assetLoader.addSound('scoop_sfx', 'sounds/scoop.wav'); // すくう音（メダル消費音）
-        this.assetLoader.addSound('medal_get_sfx', 'sounds/medal_get.wav'); // メダル獲得音
-        this.assetLoader.addSound('rare_get_sfx', 'sounds/rare_get.wav'); // レアキャラ獲得音
-        this.assetLoader.addSound('poi_in_sfx', 'sounds/poi_in.wav'); // ポイ入水音
-        this.assetLoader.addSound('button_click_sfx', 'sounds/button_click.wav');
-        // this.assetLoader.addSound('ojisan_voice', 'sounds/ojisan_voice.wav'); // 特定キャラの声
+        // --- 音声ロード ---
+        // BGM
+        this.assetLoader.loadSound('title_bgm', 'title_bgm.mp3');
+        this.assetLoader.loadSound('game_bgm', 'game_bgm.mp3');
+        this.assetLoader.loadSound('game_over_bgm', 'game_over.mp3');
+        this.assetLoader.loadSound('ranking_bgm', 'ranking.mp3');
+        // SE
+        this.assetLoader.loadSound('scoop_sfx', 'scoop.wav'); // メダル消費音
+        this.assetLoader.loadSound('medal_get_sfx', 'medal_get.wav'); // メダル獲得 (通常)
+        this.assetLoader.loadSound('rare_get_sfx', 'rare_get.wav');   // メダル獲得 (レア)
+        this.assetLoader.loadSound('poi_in_sfx', 'poi_in.wav');     // ポイ入水
+        this.assetLoader.loadSound('button_click_sfx', 'button_click.wav');
+        // キャラ固有SE (必要なら)
+        this.assetLoader.loadSound('ojisan_voice', 'ojisan_voice.wav');
 
-        this.assetLoader.startLoading(onComplete);
+        // ロード開始 & 完了時のコールバック設定
+        this.assetLoader.start(onComplete);
     }
+
+    // --- イベントハンドラ設定 ---
+    _setupEventHandlers() {
+        // Mouse Events
+        this.canvas.addEventListener('mousedown', this._handleMouseDown.bind(this));
+        this.canvas.addEventListener('mouseup', this._handleMouseUp.bind(this));
+        this.canvas.addEventListener('mousemove', this._handleMouseMove.bind(this));
+        this.canvas.addEventListener('mouseenter', () => this.isMouseInCanvas = true);
+        this.canvas.addEventListener('mouseleave', () => {
+            this.isMouseInCanvas = false;
+            this.isMouseDown = false; // Canvas外に出たらドラッグ解除
+        });
+
+        // Touch Events (簡易対応)
+        this.canvas.addEventListener('touchstart', this._handleTouchStart.bind(this), { passive: false });
+        this.canvas.addEventListener('touchend', this._handleTouchEnd.bind(this), { passive: false });
+        this.canvas.addEventListener('touchmove', this._handleTouchMove.bind(this), { passive: false });
+
+        // ウィンドウリサイズ対応など、必要に応じて追加
+    }
+
+    // --- 入力処理ハンドラ ---
+    _handleMouseDown(e) {
+        e.preventDefault();
+        this._updateMousePosition(e);
+
+        switch (this.currentState) {
+            case GameState.TITLE:
+                this.goToDifficultySelect();
+                break;
+            case GameState.DIFFICULTY_SELECT:
+            case GameState.GAME_OVER:
+            case GameState.RANKING:
+                this.ui.handleClick(this.mouseX, this.mouseY);
+                break;
+            case GameState.PLAYING:
+                if (this.medals > 0) { // メダルがある時のみ
+                    this.isMouseDown = true;
+                    this.soundManager.playSE('poi_in_sfx');
+                }
+                break;
+        }
+    }
+
+    _handleMouseUp(e) {
+        e.preventDefault();
+        this._updateMousePosition(e);
+        if (this.currentState === GameState.PLAYING && this.isMouseDown) {
+            this.isMouseDown = false;
+            this._performScoop();
+        }
+    }
+
+    _handleMouseMove(e) {
+        e.preventDefault();
+        this._updateMousePosition(e);
+    }
+
+    _handleTouchStart(e) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        this._updateMousePosition(touch); // mouseX/Yを更新
+        this.isMouseInCanvas = true; // タッチ開始でCanvas内とみなす
+        this._handleMouseDown(touch); // mousedown処理を呼び出す
+    }
+    _handleTouchEnd(e) {
+        e.preventDefault();
+        // touchendでは座標が取れないことがあるので、mouseup処理のみ
+        this._handleMouseUp({}); // 空のイベントオブジェクトでmouseup処理
+        this.isMouseInCanvas = false; // タッチ終了でCanvas外扱い（ポイを消すため）
+    }
+    _handleTouchMove(e) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        this._updateMousePosition(touch); // mouseX/Yを更新
+        // mousemove処理はPoi更新で使われるので直接呼び出さない
+    }
+
+
+    _updateMousePosition(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        this.mouseX = (e.clientX || 0) - rect.left; // e.clientX がない場合(touchendなど)は0
+        this.mouseY = (e.clientY || 0) - rect.top;
+    }
+
 
     // --- ゲーム状態遷移 ---
     startGame(difficulty) {
+        console.log(`[Game] Starting game with difficulty: ${difficulty.name}`);
         this.currentDifficulty = difficulty;
-        this.medals = this.currentDifficulty.initialMedals;
+        this.medals = difficulty.initialMedals;
         this.highScore = this.ranking.getHighScore(); // 最新のハイスコアを取得
         this.characters = [];
-        this.spawnTimer = 0;
-        this.ui.floatingTexts = []; // フローティングテキストリセット
-        this.maxCharacters = 20 + (difficulty === Difficulty.EASY ? -5 : difficulty === Difficulty.HARD ? 5 : 0); // 難易度で最大数調整
+        this.spawnTimer = 1000; // 最初のスポーンまでの時間
+        this.maxCharacters = MAX_CHARACTERS_DEFAULT + difficulty.maxCharsModifier;
+        this.ui.floatingTexts = []; // フローティングテキスト初期化
 
         // 初期キャラクター配置
-        for (let i = 0; i < 10; i++) { // 最初は少し少なめ
-            this._spawnCharacter();
+        const initialCharCount = Math.max(5, Math.floor(this.maxCharacters / 3));
+        for (let i = 0; i < initialCharCount; i++) {
+            this._spawnCharacter(true); // isInitial=true で画面内に配置
         }
 
         this.currentState = GameState.PLAYING;
         this.soundManager.stopBGM();
-        this.soundManager.playBGM('game_bgm'); // ゲームBGM再生
+        this.soundManager.playBGM('game_bgm');
     }
 
     goToGameOver() {
-        this.soundManager.stopBGM();
-        this.soundManager.playBGM('game_over_bgm', false); // ゲームオーバーBGM (ループなし)
+        console.log("[Game] Game Over.");
         this.currentState = GameState.GAME_OVER;
-        const isNewHighScore = this.medals > this.highScore;
+        this.soundManager.stopBGM();
+        this.soundManager.playBGM('game_over_bgm', false); // ループなし
+
+        // スコア記録 (最終メダル数が0未満にならないように)
+        const finalScore = Math.max(0, this.medals);
+        const isNewHighScore = finalScore > this.highScore;
         if (isNewHighScore) {
-            this.ranking.addScore(this.medals);
-            this.highScore = this.medals; // 表示用に更新
+            this.ranking.addScore(finalScore);
+            this.highScore = finalScore; // UI表示用に更新
+            console.log(`[Game] New high score: ${finalScore}`);
         }
-        // ゲームオーバー画面のボタン設定
-        this.gameOverButtons = [
-            { text: 'ランキングを見る', x: CANVAS_WIDTH / 2 - 160, y: CANVAS_HEIGHT * 0.7, width: 150, height: 50, hover: false, action: () => this.goToRanking() },
-            { text: 'タイトルへ戻る', x: CANVAS_WIDTH / 2 + 10, y: CANVAS_HEIGHT * 0.7, width: 150, height: 50, hover: false, action: () => this.goToTitle() }
-        ];
     }
 
-     goToRanking() {
+    goToRanking() {
+        console.log("[Game] Go to Ranking screen.");
+        this.currentState = GameState.RANKING;
         this.soundManager.stopBGM();
         this.soundManager.playBGM('ranking_bgm');
-        this.currentState = GameState.RANKING;
-        // ランキング画面のボタン設定
-        this.rankingButtons = [
-             { text: 'タイトルへ戻る', x: CANVAS_WIDTH / 2 - 100, y: CANVAS_HEIGHT * 0.85, width: 200, height: 50, hover: false, action: () => this.goToTitle() }
-        ];
     }
 
     goToTitle() {
+        console.log("[Game] Go to Title screen.");
+        this.currentState = GameState.TITLE;
         this.soundManager.stopBGM();
         this.soundManager.playBGM('title_bgm');
-        this.currentState = GameState.TITLE;
     }
 
     goToDifficultySelect() {
-        this.soundManager.playSE('button_click_sfx');
+        console.log("[Game] Go to Difficulty Select screen.");
         this.currentState = GameState.DIFFICULTY_SELECT;
-        // 難易度選択ボタンの設定
-        const btnWidth = 180;
-        const btnHeight = 60;
-        const btnY = CANVAS_HEIGHT / 2 - btnHeight / 2;
-        const spacing = 30;
-        const totalWidth = btnWidth * 3 + spacing * 2;
-        const startX = (CANVAS_WIDTH - totalWidth) / 2;
-
-        this.difficultyButtons = [
-            { text: Difficulty.EASY.name, difficulty: Difficulty.EASY, x: startX, y: btnY, width: btnWidth, height: btnHeight, hover: false },
-            { text: Difficulty.NORMAL.name, difficulty: Difficulty.NORMAL, x: startX + btnWidth + spacing, y: btnY, width: btnWidth, height: btnHeight, hover: false },
-            { text: Difficulty.HARD.name, difficulty: Difficulty.HARD, x: startX + (btnWidth + spacing) * 2, y: btnY, width: btnWidth, height: btnHeight, hover: false }
-        ];
+        // BGMはタイトル画面のものを継続、または専用BGMを再生
     }
-
-    // --- 入力処理 ---
-    _setupInputHandlers() {
-        this.canvas.addEventListener('mousedown', (e) => {
-            if (this.currentState === GameState.PLAYING) {
-                this.isMouseDown = true;
-                this.soundManager.playSE('poi_in_sfx'); // ポイ入水音
-            }
-             // 他の状態でのクリック処理もここに追加
-             else if (this.currentState === GameState.TITLE) {
-                 this.goToDifficultySelect();
-             }
-             else if (this.currentState === GameState.DIFFICULTY_SELECT) {
-                this.difficultyButtons.forEach(button => {
-                    if (this._isMouseOverButton(button)) {
-                        this.soundManager.playSE('button_click_sfx');
-                        this.startGame(button.difficulty);
-                    }
-                });
-            }
-             else if (this.currentState === GameState.GAME_OVER) {
-                this.gameOverButtons.forEach(button => {
-                    if (this._isMouseOverButton(button)) {
-                        this.soundManager.playSE('button_click_sfx');
-                        button.action();
-                    }
-                });
-            }
-            else if (this.currentState === GameState.RANKING) {
-                this.rankingButtons.forEach(button => {
-                    if (this._isMouseOverButton(button)) {
-                        this.soundManager.playSE('button_click_sfx');
-                        button.action();
-                    }
-                });
-            }
-        });
-
-        this.canvas.addEventListener('mouseup', (e) => {
-            if (this.currentState === GameState.PLAYING && this.isMouseDown) {
-                this.isMouseDown = false;
-                this._performScoop(); // すくい上げ処理
-            }
-        });
-
-        this.canvas.addEventListener('mousemove', (e) => {
-            const rect = this.canvas.getBoundingClientRect();
-            this.mouseX = e.clientX - rect.left;
-            this.mouseY = e.clientY - rect.top;
-
-            // ボタンのホバー状態更新
-             if (this.currentState === GameState.DIFFICULTY_SELECT) {
-                this.difficultyButtons.forEach(button => button.hover = this._isMouseOverButton(button));
-            } else if (this.currentState === GameState.GAME_OVER) {
-                this.gameOverButtons.forEach(button => button.hover = this._isMouseOverButton(button));
-            } else if (this.currentState === GameState.RANKING) {
-                this.rankingButtons.forEach(button => button.hover = this._isMouseOverButton(button));
-            }
-        });
-
-        // タッチイベント対応（簡易）
-        this.canvas.addEventListener('touchstart', (e) => {
-             e.preventDefault(); // デフォルトのタッチ動作（スクロールなど）を抑制
-             const touch = e.touches[0];
-             const rect = this.canvas.getBoundingClientRect();
-             this.mouseX = touch.clientX - rect.left;
-             this.mouseY = touch.clientY - rect.top;
-             // mousedown と同じ処理を実行
-             this.canvas.dispatchEvent(new MouseEvent('mousedown', { clientX: touch.clientX, clientY: touch.clientY }));
-         }, { passive: false });
-
-         this.canvas.addEventListener('touchend', (e) => {
-             e.preventDefault();
-             // mouseup と同じ処理を実行
-             this.canvas.dispatchEvent(new MouseEvent('mouseup', {}));
-         }, { passive: false });
-
-         this.canvas.addEventListener('touchmove', (e) => {
-             e.preventDefault();
-             const touch = e.touches[0];
-              const rect = this.canvas.getBoundingClientRect();
-              this.mouseX = touch.clientX - rect.left;
-              this.mouseY = touch.clientY - rect.top;
-              // mousemove と同じ処理を実行
-             this.canvas.dispatchEvent(new MouseEvent('mousemove', { clientX: touch.clientX, clientY: touch.clientY }));
-         }, { passive: false });
-    }
-
-    // ボタン上にマウスがあるか判定
-    _isMouseOverButton(button) {
-        return this.mouseX >= button.x && this.mouseX <= button.x + button.width &&
-               this.mouseY >= button.y && this.mouseY <= button.y + button.height;
-    }
-
 
     // --- ゲームロジック ---
     _performScoop() {
-        if (this.medals <= 0) return; // メダルがない場合はすくえない
+        if (this.medals <= 0) { // すくい上げ開始時にメダルがあっても、処理中に0になった場合の保険
+             console.log("[Game] Cannot scoop, no medals left.");
+             // 必要なら「メダルが足りません」的な音や表示
+             return;
+        }
 
-        this.medals--; // ポイを使うたびにメダル消費
-        this.soundManager.playSE('scoop_sfx'); // すくい上げ音
+        this.medals--; // メダル消費
+        this.soundManager.playSE('scoop_sfx');
+        console.log(`[Game] Scoop performed. Medals left: ${this.medals}`);
 
         let earnedMedals = 0;
         let gotRare = false;
         let scoopedCount = 0;
+        const scoopBounds = this.poi.getScoopBounds();
 
-        // 後ろからループ（削除してもインデックスがずれないように）
+        // すくい判定
         for (let i = this.characters.length - 1; i >= 0; i--) {
             const char = this.characters[i];
-            // ポイの中心とキャラクターの中心の距離で判定
-            // キャラクターの「すくわれ判定半径」を使う
-            if (distance(this.poi.x, this.poi.y, char.x, char.y) <= char.getScoopRadius()) {
-                 console.log(`Scooped: ${char.type.name}`);
-                 const charMedals = char.type.medals;
-                 earnedMedals += charMedals;
-                 scoopedCount++;
+            // ポイの中心とキャラの中心の距離で判定 (キャラのすくわれ判定半径を使用)
+            if (distance(scoopBounds.x, scoopBounds.y, char.x, char.y) <= char.getScoopRadius()) {
+                const charMedals = char.type.medals;
+                earnedMedals += charMedals;
+                scoopedCount++;
+                console.log(`[Game] Scooped: ${char.type.name} (+${charMedals} medals)`);
 
-                 // 獲得演出
-                 this.ui.addFloatingText(`+${charMedals}`, char.x, char.y - char.getRadius(), charMedals > 10 ? '#f1c40f' : 'gold', 1200, charMedals > 10 ? 24 : 18);
+                // 獲得演出
+                const floatColor = charMedals > 10 ? '#f1c40f' : (charMedals > 0 ? 'gold' : '#aaaaaa');
+                const floatSize = charMedals > 10 ? 24 : (charMedals > 5 ? 20 : 16);
+                this.ui.addFloatingText(`+${charMedals}`, char.x, char.y - char.getRadius(), { color: floatColor, size: floatSize });
 
-                // レアキャラ判定 (例: level 8以上)
+                // レアキャラ判定 (レベル8以上など)
                 if (char.type.level >= 8) {
                     gotRare = true;
                 }
 
-                // 特定キャラの効果音（例: おじさん）
-                if (char.type.id === 'ojisan') {
-                   // this.soundManager.playSE('ojisan_voice');
+                // 固有のすくい音があれば再生
+                if(char.scoopSoundId) {
+                    this.soundManager.playSE(char.scoopSoundId);
                 }
 
-                // キャラクターを削除
+                // キャラクター削除
                 this.characters.splice(i, 1);
             }
         }
 
+        // メダル獲得処理と効果音
         if (earnedMedals > 0) {
             this.medals += earnedMedals;
+            console.log(`[Game] Earned ${earnedMedals} medals. Total: ${this.medals}`);
             if (gotRare) {
-                this.soundManager.playSE('rare_get_sfx'); // レア獲得音
-                // レアゲット演出（画面フラッシュなど）を追加可能
-                 this.ui.addFloatingText(`超レアゲット！`, this.poi.x, this.poi.y - 60, '#ff00ff', 2000, 30);
-            } else if (scoopedCount > 0) {
-                this.soundManager.playSE('medal_get_sfx'); // 通常の獲得音
-            }
-            // 大量ゲット演出 (例: 3体以上)
-            if (scoopedCount >= 3) {
-                 this.ui.addFloatingText(`大量ゲット! x${scoopedCount}`, this.poi.x, this.poi.y - 30, '#1abc9c', 1500, 26);
+                this.soundManager.playSE('rare_get_sfx');
+                // レアゲット専用演出（画面フラッシュなど）
+                 this.ui.addFloatingText(`超レアゲット！`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, { color: '#ff00ff', size: 36, duration: 2000, vy: -0.2 });
+            } else {
+                this.soundManager.playSE('medal_get_sfx', 0.8); // 通常獲得音は少し音量抑えめかも
             }
         }
 
-        // メダルが0になったらゲームオーバー
+        // 大量ゲット演出 (3体以上)
+        if (scoopedCount >= 3) {
+            console.log(`[Game] Multi scoop bonus! x${scoopedCount}`);
+            const comboColor = scoopedCount >= 5 ? '#ff6347' : '#1abc9c'; // 5体以上はさらに派手な色
+            this.ui.addFloatingText(`すごい！ x${scoopedCount}`, this.poi.x, this.poi.y - 60, { color: comboColor, size: 28, duration: 1500 });
+        }
+
+        // ゲームオーバーチェック
         if (this.medals <= 0) {
+            console.log("[Game] Medals reached zero after scoop.");
             this.goToGameOver();
         }
     }
 
-    _spawnCharacter() {
-        if (this.characters.length >= this.maxCharacters) {
-            return; // 上限に達していたらスポーンしない
-        }
+    _spawnCharacter(isInitial = false) {
+        if (this.characters.length >= this.maxCharacters) return; // 上限チェック
 
-        // 難易度に応じたレベル分布からキャラクタータイプを選択
-        const levelDistribution = this.currentDifficulty.levelDistribution;
-        const rand = Math.random();
+        // --- キャラクタータイプの抽選ロジック ---
+        const difficulty = this.currentDifficulty;
+        const levelDistribution = difficulty.levelDistribution;
+        const levelRand = Math.random();
         let cumulativeRate = 0;
-        let selectedLevel = 1;
+        let targetLevel = 1;
         for (let i = 0; i < levelDistribution.length; i++) {
             cumulativeRate += levelDistribution[i];
-            if (rand <= cumulativeRate) {
-                selectedLevel = i + 1; // level は 1 から始まる
+            if (levelRand <= cumulativeRate) {
+                targetLevel = i + 1; // レベルは1から
                 break;
             }
         }
-         // selectedLevelに近いレベルのキャラクターをフィルタリング
-        const possibleTypes = characterTypes.filter(type =>
-            Math.abs(type.level - selectedLevel) <= 1 // レベルが近いものを候補に（完全に一致しなくても良い）
-        );
 
-        // さらにappearanceRateに基づいて抽選
-        let totalRate = possibleTypes.reduce((sum, type) => sum + type.appearanceRate, 0);
-        let typeRand = Math.random() * totalRate;
+        // ターゲットレベルに近いキャラクターを候補にする (例: ±1レベル)
+        const possibleTypes = characterTypes.filter(type => Math.abs(type.level - targetLevel) <= 1);
+        if (possibleTypes.length === 0) { // 候補がいない場合 (定義が少ない場合など)
+             possibleTypes.push(...characterTypes.filter(type => type.level === targetLevel)); // 完全一致を探す
+             if (possibleTypes.length === 0) possibleTypes.push(characterTypes[0]); // それでもなければ最初のキャラ
+        }
+
+        // 出現率(appearanceRate)に基づいて最終決定
+        const totalAppearanceRate = possibleTypes.reduce((sum, type) => sum + (type.appearanceRate || 1), 0);
+        let appearanceRand = Math.random() * totalAppearanceRate;
         let selectedType = possibleTypes[possibleTypes.length - 1]; // デフォルト
-         for (const type of possibleTypes) {
-             if (typeRand < type.appearanceRate) {
-                 selectedType = type;
-                 break;
-             }
-             typeRand -= type.appearanceRate;
-         }
+        for (const type of possibleTypes) {
+            if (appearanceRand < (type.appearanceRate || 1)) {
+                selectedType = type;
+                break;
+            }
+            appearanceRand -= (type.appearanceRate || 1);
+        }
+        // --- 抽選ロジックここまで ---
 
+        const newChar = new Character(selectedType, this.assetLoader, difficulty.speedMultiplier);
 
-        const newChar = new Character(selectedType, this.assetLoader, this.currentDifficulty.speedMultiplier);
+        // 初期配置の場合、画面内にランダムに配置
+        if (isInitial) {
+            const margin = newChar.getRadius() + 10;
+            newChar.x = getRandomFloat(margin, CANVAS_WIDTH - margin);
+            newChar.y = getRandomFloat(margin, CANVAS_HEIGHT - margin);
+        }
+
         this.characters.push(newChar);
+        // console.log(`[Game] Spawned: ${selectedType.name} (Total: ${this.characters.length})`); // スポーンログ（デバッグ用）
+    }
+
+    _updateCharacters(deltaTime) {
+        for (let i = this.characters.length - 1; i >= 0; i--) {
+            const char = this.characters[i];
+            char.update(deltaTime, this.poi.x, this.poi.y);
+
+            // 画面外に出たキャラは削除 (パフォーマンスのため)
+            if (char.isOutOfScreen()) {
+                this.characters.splice(i, 1);
+                // console.log(`[Game] Character removed (out of screen). Total: ${this.characters.length}`);
+            }
+        }
+    }
+
+    _updateSpawning(deltaTime) {
+        if (this.characters.length < this.maxCharacters) {
+            this.spawnTimer -= deltaTime;
+            if (this.spawnTimer <= 0) {
+                this._spawnCharacter();
+                // 次のスポーンまでの時間を計算 (基本間隔 * 難易度補正 * 密度補正 * ランダム)
+                const baseInterval = 1800; // ミリ秒
+                const difficultyFactor = 1.0 / this.currentDifficulty.spawnRateMultiplier;
+                const densityFactor = Math.max(0.2, 1.0 - (this.characters.length / this.maxCharacters)); // 密度が高いほど間隔長く
+                this.spawnTimer = baseInterval * difficultyFactor * densityFactor * getRandomFloat(0.8, 1.2);
+            }
+        }
     }
 
     // --- 更新処理 ---
     update(deltaTime) {
+        this.ui.update(deltaTime); // UI要素のアニメーション（フローティングテキストなど）
+
         switch (this.currentState) {
-            case GameState.PLAYING:
-                this._updatePlaying(deltaTime);
+            case GameState.LOADING:
+                // ローディング中は特に何もしない (描画のみ)
                 break;
-            // 他の状態での更新処理（アニメーションなど）
-            case GameState.TITLE:
-            case GameState.DIFFICULTY_SELECT:
-            case GameState.GAME_OVER:
-            case GameState.RANKING:
-                // UI要素のアニメーション更新など
-                this.ui.update(deltaTime);
-                 break;
+            case GameState.PLAYING:
+                this.poi.update(this.mouseX, this.mouseY, this.isMouseDown, this.isMouseInCanvas);
+                this._updateCharacters(deltaTime);
+                this._updateSpawning(deltaTime);
+                 // ゲームオーバー条件チェック (メダル0で、かつマウスが上がっている状態)
+                 if (this.medals <= 0 && !this.isMouseDown) {
+                     this.goToGameOver();
+                 }
+                break;
+            // 他の画面（タイトル、選択など）のアニメーション等があればここに追加
         }
     }
-
-    _updatePlaying(deltaTime) {
-        // ポイの位置更新
-        this.poi.update(this.mouseX, this.mouseY, this.isMouseDown);
-
-        // キャラクターの移動更新
-        this.characters.forEach(char => char.update(deltaTime, this.poi.x, this.poi.y));
-
-        // キャラクターのスポーン管理
-        this.spawnTimer -= deltaTime;
-        if (this.spawnTimer <= 0) {
-            this._spawnCharacter();
-            // 次のスポーンまでの時間 (難易度と現在のキャラ数で調整)
-            const baseInterval = 1500 / this.currentDifficulty.spawnRateMultiplier;
-            const densityFactor = Math.max(0.1, 1 - (this.characters.length / this.maxCharacters)); // 密度が高いほど間隔を長く
-            this.spawnTimer = baseInterval * densityFactor * getRandomFloat(0.7, 1.3);
-        }
-
-         // UI要素の更新
-        this.ui.update(deltaTime);
-
-        // メダルが0になった場合のチェック（念のため）
-        if (this.medals <= 0 && !this.isMouseDown) { // すくい上げ中でなければ即ゲームオーバー
-            this.goToGameOver();
-        }
-    }
-
 
     // --- 描画処理 ---
     draw() {
-        // 背景クリア
-        this.ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        const ctx = this.ctx;
+        ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); // 画面クリア
 
-        // 背景描画 (画像 or 単色)
-        const gameBg = this.assetLoader.getImage('game_bg');
-        if (this.currentState === GameState.PLAYING && gameBg) {
-            this.ctx.drawImage(gameBg, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-        } else if (this.currentState === GameState.PLAYING) {
-             // 画像がない場合は水色背景
-            this.ctx.fillStyle = '#e0f7fa';
-            this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-            // 気泡エフェクトなど追加可能
-        }
-
-
-        // 状態に応じた描画
-        switch (this.currentState) {
-             case GameState.LOADING:
-                this.ui.drawLoadingScreen(this.assetLoader.getLoadingProgress());
-                break;
-            case GameState.TITLE:
-                this.ui.drawTitleScreen();
-                break;
-            case GameState.DIFFICULTY_SELECT:
-                 this.ui.drawDifficultySelectScreen(this.difficultyButtons);
-                break;
-            case GameState.PLAYING:
-                this._drawPlaying();
-                break;
-            case GameState.GAME_OVER:
-                 // ゲーム画面を薄く表示した上にオーバーレイ
-                 this._drawPlaying(true); // isBackground=true
-                 const isNewHighScore = this.medals > this.ranking.scores.find(s => s.score === this.highScore)?.score; // ちょっと冗長かも
-                 this.ui.drawGameOverScreen(this.medals <=0 ? 0 : this.medals, this.highScore, isNewHighScore, this.gameOverButtons);
-                 break;
-             case GameState.RANKING:
-                 this.ui.drawRankingScreen(this.ranking.getHighScores(), this.rankingButtons);
-                 break;
-        }
-    }
-
-    _drawPlaying(isBackground = false) {
-         // キャラクター描画
-        this.characters.forEach(char => char.draw(this.ctx));
-
-        // ポイ描画
-        this.poi.draw(this.ctx);
-
-        // UI描画 (ゲームオーバー画面の背景として描画する場合はUIは描画しない)
-        if (!isBackground) {
-             this.ui.drawGameUI(this.medals, this.highScore);
+        try { // 描画エラーでループが止まらないように
+            switch (this.currentState) {
+                case GameState.LOADING:
+                    this.ui.drawLoadingScreen(this.assetLoader.getProgress());
+                    break;
+                case GameState.TITLE:
+                    this.ui.drawTitleScreen();
+                    break;
+                case GameState.DIFFICULTY_SELECT:
+                    this.ui.drawDifficultySelectScreen();
+                    break;
+                case GameState.PLAYING:
+                    this.ui.drawGameScreen(this.medals, this.highScore); // 背景とUIバー
+                    this.characters.forEach(char => char.draw(ctx));   // キャラクター描画
+                    this.poi.draw(ctx);                                // ポイ描画 (最前面)
+                    break;
+                case GameState.GAME_OVER:
+                    // ゲーム画面を背景として薄く描画
+                    this.ui.drawGameScreen(this.medals, this.highScore); // 背景とUIバー
+                    this.characters.forEach(char => char.draw(ctx));   // キャラクター描画
+                    // ポイは描画しない
+                    // ゲームオーバーUIを上書き描画
+                    const finalScore = Math.max(0, this.medals);
+                    const isNewHighScore = finalScore > this.ranking.scores.find(s => s.score === this.highScore)?.score; // TODO: この判定改善の余地あり
+                    this.ui.drawGameOverScreen(finalScore, this.highScore, isNewHighScore);
+                    break;
+                case GameState.RANKING:
+                    this.ui.drawRankingScreen(this.ranking.getHighScores());
+                    break;
+                default:
+                    // 未知の状態の場合のエラー表示
+                    ctx.fillStyle = 'red';
+                    ctx.font = '20px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(`Error: Unknown Game State "${this.currentState}"`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+            }
+        } catch (e) {
+             console.error(`[Game] Error during draw state ${this.currentState}:`, e);
+             ctx.fillStyle = 'red';
+             ctx.font = '16px Arial';
+             ctx.textAlign = 'left';
+             ctx.fillText(`Render Error! Check console. (${this.currentState})`, 10, 50);
         }
     }
 
@@ -1052,36 +1254,43 @@ class Game {
     gameLoop(timestamp = 0) {
         const deltaTime = timestamp - this.lastTime;
         this.lastTime = timestamp;
+        // deltaTime が異常値（タブ非アクティブからの復帰など）の場合の対策
+        const dt = (deltaTime > 0 && deltaTime < 500) ? Math.min(deltaTime, 100) : 16.67; // 500ms以上空いたら1フレーム分(60fps)とする
 
-        // フレームレートが極端に低い場合はdeltaTimeを制限 (例: 最大100ms)
-        const dt = Math.min(deltaTime, 100);
-
-        if (this.currentState !== GameState.LOADING) { // ロード中以外は更新
-             this.update(dt);
+        try {
+            this.update(dt);
+            this.draw();
+        } catch (error) {
+            console.error("[Game] Uncaught error in game loop:", error);
+            // ここでループを停止することも検討できる
+            // return;
         }
-        this.draw();
 
         requestAnimationFrame(this.gameLoop.bind(this));
     }
 }
 
-// --- ゲームの開始 ---
+// --- ゲーム開始処理 ---
 window.onload = () => {
+    console.log("[Main] Window loaded.");
     const canvas = document.getElementById('gameCanvas');
-    if (!canvas) {
-        console.error("Canvas element not found!");
-        return;
-    }
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-        console.error("Failed to get 2D context!");
+    const ctx = canvas?.getContext('2d');
+
+    if (!canvas || !ctx) {
+        console.error("[Main] Canvas initialization failed. Element 'gameCanvas' not found or context unavailable.");
+        alert("エラー: ゲームの描画に必要なCanvas要素が見つからないか、初期化に失敗しました。");
         return;
     }
 
     canvas.width = CANVAS_WIDTH;
     canvas.height = CANVAS_HEIGHT;
+    console.log("[Main] Canvas initialized. Creating game instance...");
 
-    // ゲームインスタンスを作成し、初期化を開始
-    const game = new Game(canvas, ctx);
-    game.init();
+    try {
+        const game = new Game(canvas, ctx);
+        game.init(); // ゲーム初期化とループ開始
+    } catch (error) {
+        console.error("[Main] Critical error initializing game:", error);
+        alert(`致命的なエラーが発生しました: ${error.message}`);
+    }
 };
