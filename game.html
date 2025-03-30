@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>金魚すくいゲーム</title>
+    <style>
+        body { text-align: center; background: lightblue; }
+        canvas { background: #87CEEB; border: 2px solid black; }
+    </style>
+</head>
+<body>
+    <h1>金魚すくいゲーム</h1>
+    <canvas id="gameCanvas" width="600" height="400"></canvas>
+    <p>クリックして金魚をすくおう！</p>
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        let goldfish = { x: Math.random() * 550 + 25, y: Math.random() * 350 + 25, size: 20 };
+        let score = 0;
+
+        function drawGoldfish() {
+            ctx.beginPath();
+            ctx.arc(goldfish.x, goldfish.y, goldfish.size, 0, Math.PI * 2);
+            ctx.fillStyle = "orange";
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        function updateGame() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawGoldfish();
+        }
+
+        canvas.addEventListener("click", function (event) {
+            let rect = canvas.getBoundingClientRect();
+            let mouseX = event.clientX - rect.left;
+            let mouseY = event.clientY - rect.top;
+
+            let dx = mouseX - goldfish.x;
+            let dy = mouseY - goldfish.y;
+            let distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < goldfish.size) {
+                score++;
+                goldfish.x = Math.random() * 550 + 25;
+                goldfish.y = Math.random() * 350 + 25;
+            }
+
+            updateGame();
+        });
+
+        updateGame();
+    </script>
+</body>
+</html>
