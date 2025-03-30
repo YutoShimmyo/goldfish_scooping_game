@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>奇妙な仲間たちをすくえ！メダルポイポイ</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            margin: 0;
+            font-family: 'Arial', sans-serif; /* モダンなフォントに変更可能 */
+        }
+        canvas {
+            border: 1px solid black;
+            background-color: #e0f7fa; /* 水色背景 */
+            /* 背景画像をCSSで設定することも可能 */
+            /* background-image: url('images/background.png'); */
+            background-size: cover;
+            display: block; /* canvas下の余白を防ぐ */
+        }
+        /* 必要に応じて他のUI要素のスタイルを追加 */
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <script src="game.js"></script>
+</body>
+</html>
