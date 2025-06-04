@@ -58,7 +58,6 @@
 
 ## 📁 ディレクトリ構成
 .
-
 ├── images/
 │   ├── wakin.png
 │   ├── demekin.png
@@ -107,5 +106,5 @@
 このプロジェクトは [MIT License](LICENSE) の下で公開されています。
 
 ---
-*製作者: Your Name (または AI)*
-*作成日: 2025-06-04*
+*製作者: Yuto Shimmyo
+*作成日: 2025-05-20
