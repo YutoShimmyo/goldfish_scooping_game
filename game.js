@@ -1205,6 +1205,12 @@ class Game {
         const ctx = this.ctx;
         ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); // 画面クリア
 
+        if (this.currentState === GameState.PLAYING && this.isMouseInCanvas) {
+            this.canvas.style.cursor = 'none'; // プレイ中はポイを表示するためカーソルを消す
+        } else {
+            this.canvas.style.cursor = 'pointer'; // それ以外はポインターカーソルを表示
+        }
+
         try { // 描画エラーでループが止まらないように
             switch (this.currentState) {
                 case GameState.LOADING:
