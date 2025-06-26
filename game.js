@@ -53,7 +53,7 @@ const characterTypes = [
     { id: 'baby', name: '赤ちゃん', level: 1, medals: 1, speed: 0.5, avoidsPoi: false, hitRadius: 16, appearanceRate: 10, color: '#ffc9a7', imageName: 'baby.png' },
     { id: 'ojisan', name: 'おじさん', level: 6, medals: 15, speed: 1.3, avoidsPoi: true, hitRadius: 28, appearanceRate: 5, color: '#bdc3c7', imageName: 'ojisan.png', scoopSoundId: 'ojisan_voice' },
     { id: 'brick', name: 'レンガ', level: 1, medals: 0, speed: 0.1, avoidsPoi: false, hitRadius: 20, appearanceRate: 5, color: '#a0522d', imageName: 'brick.png' },
-    { id: 'rare_dragon', name: 'レアドラン', level: 10, medals: 50, speed: 2.0, avoidsPoi: true, hitRadius: 35, appearanceRate: 1, color: '#f1c40f', imageName: 'rare_dragon.png' }
+    { id: 'rare_dragon', name: 'レアドラゴン', level: 10, medals: 50, speed: 2.0, avoidsPoi: true, hitRadius: 35, appearanceRate: 1, color: '#f1c40f', imageName: 'rare_dragon.png' }
     // --- ここにさらに多様なキャラクターを追加 ---
 ];
 
