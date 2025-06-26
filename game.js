@@ -886,10 +886,13 @@ class Game {
         }
         this.medals--;
         this.soundManager.playSE('scoop_sfx');
+        console.log(`[Game] Scoop performed. Medals left: ${this.medals}`);
+    
         let earnedMedals = 0;
         let gotRare = false;
         let scoopedCount = 0;
         const scoopBounds = this.poi.getScoopBounds();
+    
         for (let i = this.characters.length - 1; i >= 0; i--) {
             const char = this.characters[i];
             if (distance(scoopBounds.x, scoopBounds.y, char.x, char.y) <= char.getScoopRadius()) {
@@ -904,6 +907,7 @@ class Game {
                 this.characters.splice(i, 1);
             }
         }
+    
         if (earnedMedals > 0) {
             this.medals += earnedMedals;
             if (gotRare) {
@@ -917,8 +921,15 @@ class Game {
             const comboColor = scoopedCount >= 5 ? '#ff6347' : '#1abc9c';
             this.ui.addFloatingText(`すごい！ x${scoopedCount}`, this.poi.x, this.poi.y - 60, { color: comboColor, size: 28, duration: 1500 });
         }
+    
+        // ↓↓↓ このゲームオーバーチェックを追加・修正します ↓↓↓
+        if (this.medals <= 0) {
+            // goToGameOverが呼ばれる前に、次のフレームで操作ができてしまわないようにcurrentStateを先に変更する
+            this.currentState = GameState.GAME_OVER; 
+            this.goToGameOver();
+        }
     }
-
+    
     _spawnCharacter(isInitial = false) {
         if (this.characters.length >= this.maxCharacters) return;
         const difficulty = this.currentDifficulty;
@@ -989,9 +1000,12 @@ class Game {
                 this.poi.update(this.mouseX, this.mouseY, this.isMouseDown, this.isMouseInCanvas);
                 this._updateCharacters(deltaTime);
                 this._updateSpawning(deltaTime);
-                this.gameTimer -= deltaTime; // タイマーを減らす
+                this.gameTimer -= deltaTime;
+    
                 if (this.gameTimer <= 0 || this.medals <= 0) {
-                    this.goToGameOver(); // 時間が来たらゲームオーバー
+                    if (this.currentState === GameState.PLAYING) { // 既にGAME_OVERになっていない場合のみ呼び出す
+                        this.goToGameOver();
+                    }
                 }
                 break;
         }
