@@ -990,7 +990,7 @@ class Game {
                 this._updateCharacters(deltaTime);
                 this._updateSpawning(deltaTime);
                 this.gameTimer -= deltaTime; // タイマーを減らす
-                if (this.gameTimer <= 0) {
+                if (this.gameTimer <= 0 || this.medals <= 0) {
                     this.goToGameOver(); // 時間が来たらゲームオーバー
                 }
                 break;
