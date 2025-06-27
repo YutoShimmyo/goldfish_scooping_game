@@ -720,6 +720,7 @@ class Game {
         this.spawnTimer = 0;
         this.maxCharacters = MAX_CHARACTERS_DEFAULT;
         this.gameTimer = 0; // ゲームタイマー
+        this.isAudioUnlocked = false;
         this._setupEventHandlers();
         console.log("[Game] Game instance created.");
     }
@@ -768,14 +769,16 @@ class Game {
         this.canvas.addEventListener('touchmove', this._handleTouchMove.bind(this), { passive: false });
     }
 
-    // ★★★ 変更点 ★★★
     _handleMouseDown(e) {
         e.preventDefault();
 
         // ブラウザの自動再生ポリシー対策：
         // ユーザーによる最初のクリック時に、すべての音声コンテキストを有効にする
-        if (this.soundManager.currentBGM && this.soundManager.currentBGM.paused) {
-            this.soundManager.currentBGM.play().catch(e => console.warn("BGM play resumed by user interaction."));
+        if (!this.isAudioUnlocked) {
+            this.isAudioUnlocked = true;
+            if (this.soundManager.currentBGM && this.soundManager.currentBGM.paused) {
+                this.soundManager.currentBGM.play().catch(e => {});
+            }
         }
 
         this._updateMousePosition(e);
