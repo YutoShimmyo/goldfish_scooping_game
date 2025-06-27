@@ -1,8 +1,8 @@
 /**
  * 奇妙な仲間たちをすくえ！メダルポイポイ ゲーム
  *
- * 作成日: 2023-MM-DD (あなたの現在の日付)
- * 製作者: Your Name (または AI)
+ * 作成日: 2025-06-27
+ * 製作者: Yuto Shimmyo & AI
  *
  * このゲームは、マウスでポイを操作し、様々なキャラクターをすくってメダルを増やすゲームです。
  */
@@ -149,10 +149,23 @@ class AssetLoader {
         return (data && data.loaded) ? data.asset : null;
     }
 
-    getSound(id) {
+    getSound(id, clone = false) { // clone引数を追加
         const data = this.sounds.get(id);
-        const sound = data ? data.asset : null;
-        return sound && sound.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA ? sound.cloneNode() : null;
+        if (!data || !data.asset) return null;
+
+        const sound = data.asset;
+        
+        // 音声が再生可能かチェック
+        if (sound.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA) {
+            console.warn(`[AssetLoader] Sound asset not ready: ${id}`);
+            return null;
+        }
+
+        if (clone) {
+            return sound.cloneNode(true); // 効果音(SE)用に複製を返す
+        }
+        
+        return sound; // BGM用に元のデータを返す
     }
 
     start(onComplete) {
@@ -182,11 +195,20 @@ class SoundManager {
     playBGM(id, loop = true) {
         if (this.isMuted) return;
         this.stopBGM();
-        const bgm = this.assetLoader.getSound(id);
+        
+        // BGMは複製しない（第2引数にfalseを指定）
+        const bgm = this.assetLoader.getSound(id, false);
+        
         if (bgm) {
             this.currentBGM = bgm;
             this.currentBGM.loop = loop;
-            this.currentBGM.play().catch(e => console.warn(`[SoundManager] BGM play failed for ${id}: ${e.message}`));
+            this.currentBGM.currentTime = 0; // 再生位置をリセット
+            const playPromise = this.currentBGM.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    console.log(`BGM [${id}] playback was prevented. It will start after user interaction.`);
+                });
+            }
         } else {
             console.warn(`[SoundManager] BGM asset not ready or not found: ${id}`);
         }
@@ -202,7 +224,10 @@ class SoundManager {
 
     playSE(id, volume = 1.0) {
         if (this.isMuted) return;
-        const se = this.assetLoader.getSound(id);
+        
+        // 効果音は複製する（第2引数にtrueを指定）
+        const se = this.assetLoader.getSound(id, true); 
+        
         if (se) {
             se.volume = volume;
             se.play().catch(e => console.warn(`[SoundManager] SE play failed for ${id}: ${e.message}`));
@@ -772,12 +797,13 @@ class Game {
     _handleMouseDown(e) {
         e.preventDefault();
 
-        // ブラウザの自動再生ポリシー対策：
-        // ユーザーによる最初のクリック時に、すべての音声コンテキストを有効にする
+        // ユーザーの最初の操作で音声再生をアンロックする
         if (!this.isAudioUnlocked) {
             this.isAudioUnlocked = true;
+            console.log("Audio Unlocked by user gesture.");
+            // 待機中だったBGMがあれば再生を再試行する
             if (this.soundManager.currentBGM && this.soundManager.currentBGM.paused) {
-                this.soundManager.currentBGM.play().catch(e => {});
+                this.soundManager.currentBGM.play();
             }
         }
 
@@ -795,7 +821,8 @@ class Game {
             case GameState.PLAYING:
                 if (this.medals > 0) {
                     this.isMouseDown = true;
-                    this.soundManager.playSE('poi_in_sfx');
+                    // playSEはユーザー操作起因なので、ここで問題なく鳴るはず
+                    this.soundManager.playSE('poi_in_sfx'); 
                 }
                 break;
         }
