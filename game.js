@@ -768,11 +768,22 @@ class Game {
         this.canvas.addEventListener('touchmove', this._handleTouchMove.bind(this), { passive: false });
     }
 
+    // ★★★ 変更点 ★★★
     _handleMouseDown(e) {
         e.preventDefault();
+
+        // ブラウザの自動再生ポリシー対策：
+        // ユーザーによる最初のクリック時に、すべての音声コンテキストを有効にする
+        if (this.soundManager.currentBGM && this.soundManager.currentBGM.paused) {
+            this.soundManager.currentBGM.play().catch(e => console.warn("BGM play resumed by user interaction."));
+        }
+
         this._updateMousePosition(e);
+
         switch (this.currentState) {
-            case GameState.TITLE: this.goToDifficultySelect(); break;
+            case GameState.TITLE:
+                this.goToDifficultySelect();
+                break;
             case GameState.DIFFICULTY_SELECT:
             case GameState.GAME_OVER:
             case GameState.RANKING:
@@ -806,7 +817,7 @@ class Game {
         const touch = e.touches[0];
         this._updateMousePosition(touch);
         this.isMouseInCanvas = true;
-        this._handleMouseDown(touch);
+        this._handleMouseDown(touch); // mousedown処理を共通化して呼び出す
     }
     _handleTouchEnd(e) {
         e.preventDefault();
@@ -845,15 +856,18 @@ class Game {
     }
 
     goToGameOver() {
+        // ゲームオーバー処理が複数回呼ばれるのを防ぐ
+        if (this.currentState !== GameState.PLAYING) return;
+
         console.log("[Game] Game Over.");
         this.currentState = GameState.GAME_OVER;
         this.soundManager.stopBGM();
         this.soundManager.playBGM('game_over_bgm', false);
 
         const finalScore = this.medals;
-        this.ranking.addScore(finalScore); // スコアを記録
-        const currentHighScore = this.ranking.getHighScore(); // 最新のハイスコアを再取得
-        const isNewHighScore = finalScore === currentHighScore && finalScore > this.highScore;
+        const previousHighScore = this.ranking.getHighScore();
+        this.ranking.addScore(finalScore);
+        const isNewHighScore = finalScore > previousHighScore;
 
         if (isNewHighScore) {
             this.highScore = finalScore;
@@ -881,18 +895,16 @@ class Game {
     }
 
     _performScoop() {
-        if (this.medals <= 0) {
-            return;
-        }
+        if (this.medals <= 0) return;
+
         this.medals--;
         this.soundManager.playSE('scoop_sfx');
-        console.log(`[Game] Scoop performed. Medals left: ${this.medals}`);
-    
+
         let earnedMedals = 0;
         let gotRare = false;
         let scoopedCount = 0;
         const scoopBounds = this.poi.getScoopBounds();
-    
+
         for (let i = this.characters.length - 1; i >= 0; i--) {
             const char = this.characters[i];
             if (distance(scoopBounds.x, scoopBounds.y, char.x, char.y) <= char.getScoopRadius()) {
@@ -907,7 +919,7 @@ class Game {
                 this.characters.splice(i, 1);
             }
         }
-    
+
         if (earnedMedals > 0) {
             this.medals += earnedMedals;
             if (gotRare) {
@@ -921,15 +933,8 @@ class Game {
             const comboColor = scoopedCount >= 5 ? '#ff6347' : '#1abc9c';
             this.ui.addFloatingText(`すごい！ x${scoopedCount}`, this.poi.x, this.poi.y - 60, { color: comboColor, size: 28, duration: 1500 });
         }
-    
-        // ↓↓↓ このゲームオーバーチェックを追加・修正します ↓↓↓
-        if (this.medals <= 0) {
-            // goToGameOverが呼ばれる前に、次のフレームで操作ができてしまわないようにcurrentStateを先に変更する
-            this.currentState = GameState.GAME_OVER; 
-            this.goToGameOver();
-        }
     }
-    
+
     _spawnCharacter(isInitial = false) {
         if (this.characters.length >= this.maxCharacters) return;
         const difficulty = this.currentDifficulty;
@@ -1001,11 +1006,9 @@ class Game {
                 this._updateCharacters(deltaTime);
                 this._updateSpawning(deltaTime);
                 this.gameTimer -= deltaTime;
-    
+
                 if (this.gameTimer <= 0 || this.medals <= 0) {
-                    if (this.currentState === GameState.PLAYING) { // 既にGAME_OVERになっていない場合のみ呼び出す
-                        this.goToGameOver();
-                    }
+                    this.goToGameOver();
                 }
                 break;
         }
@@ -1038,8 +1041,9 @@ class Game {
                     break;
                 case GameState.GAME_OVER:
                     const finalScore = this.medals;
-                    const isNewHighScore = finalScore > this.highScore;
-                    this.ui.drawGameOverScreen(finalScore, this.ranking.getHighScore(), isNewHighScore);
+                    const previousHighScore = this.ranking.getHighScore();
+                    const isNewHighScore = finalScore > previousHighScore;
+                    this.ui.drawGameOverScreen(finalScore, previousHighScore, isNewHighScore);
                     break;
                 case GameState.RANKING:
                     this.ui.drawRankingScreen(this.ranking.getHighScores(5));
