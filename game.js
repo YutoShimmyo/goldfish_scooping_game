@@ -224,14 +224,17 @@ class SoundManager {
 
     playSE(id, volume = 1.0) {
         if (this.isMuted) return;
-        
-        // 効果音は複製する（第2引数にtrueを指定）
-        const se = this.assetLoader.getSound(id, true); 
-        
-        if (se) {
-            se.volume = volume;
-            se.play().catch(e => console.warn(`[SoundManager] SE play failed for ${id}: ${e.message}`));
+
+        // 元の音声ファイルのパスを取得
+        const originalSound = this.assetLoader.sounds.get(id)?.asset;
+        if (!originalSound) {
+             console.warn(`[SoundManager] SE asset not found: ${id}`);
+             return;
         }
+
+        const se = new Audio(originalSound.src);
+        se.volume = volume;
+        se.play().catch(e => { /* エラーは無視して良い */ });
     }
 
     toggleMute() {
@@ -797,10 +800,10 @@ class Game {
     _handleMouseDown(e) {
         e.preventDefault();
 
-        // ユーザーの最初の操作で音声再生をアンロックする
+        // ユーザーの最初の操作で音声再生のロックを解除する
         if (!this.isAudioUnlocked) {
             this.isAudioUnlocked = true;
-            console.log("Audio Unlocked by user gesture.");
+            console.log("Audio context unlocked by user gesture.");
             // 待機中だったBGMがあれば再生を再試行する
             if (this.soundManager.currentBGM && this.soundManager.currentBGM.paused) {
                 this.soundManager.currentBGM.play();
@@ -821,8 +824,7 @@ class Game {
             case GameState.PLAYING:
                 if (this.medals > 0) {
                     this.isMouseDown = true;
-                    // playSEはユーザー操作起因なので、ここで問題なく鳴るはず
-                    this.soundManager.playSE('poi_in_sfx'); 
+                    this.soundManager.playSE('poi_in_sfx');
                 }
                 break;
         }
